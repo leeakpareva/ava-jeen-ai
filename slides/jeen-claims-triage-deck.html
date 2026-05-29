@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Albion Mutual — Claims Triage Agent | Jeen Solution Engineer Demo</title>
+<style>
+  :root{
+    --ink:#15121c; --muted:#5b5566; --line:#e6e2ee; --paper:#ffffff;
+    --brand:#5b2b8a; --brand2:#7c4dbd; --accent:#13b39b; --warn:#d9822b; --bad:#c0392b;
+    --bg:#0e0b14;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Arial,sans-serif;background:var(--bg);color:var(--ink);}
+  .deck{max-width:1100px;margin:0 auto;}
+  .slide{
+    position:relative;background:var(--paper);width:100%;aspect-ratio:16/9;
+    margin:26px auto;border-radius:14px;overflow:hidden;
+    box-shadow:0 18px 50px rgba(0,0,0,.45);padding:54px 64px;display:flex;flex-direction:column;
+  }
+  .kicker{display:inline-flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--brand);font-weight:700;margin-bottom:14px}
+  .kicker::before{content:"";width:26px;height:2px;background:var(--brand)}
+  h1{font-size:40px;line-height:1.08;letter-spacing:-.02em;margin-bottom:10px}
+  h2{font-size:30px;line-height:1.12;letter-spacing:-.01em;margin-bottom:18px}
+  .sub{color:var(--muted);font-size:17px;max-width:46ch}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:18px;flex:1}
+  .col h3{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--brand);margin-bottom:10px}
+  ul{list-style:none;display:flex;flex-direction:column;gap:11px}
+  li{font-size:16px;line-height:1.4;padding-left:22px;position:relative;color:#2a2533}
+  li::before{content:"";position:absolute;left:0;top:8px;width:8px;height:8px;border-radius:2px;background:var(--brand2)}
+  li.good::before{background:var(--accent)} li.warn::before{background:var(--warn)} li.bad::before{background:var(--bad)}
+  .pagefoot{position:absolute;bottom:20px;left:64px;right:64px;display:flex;justify-content:space-between;
+    font-size:12px;color:#9a93a8;border-top:1px solid var(--line);padding-top:12px}
+  .logo{font-weight:800;letter-spacing:-.02em;color:var(--brand)}
+  .logo b{color:var(--accent)}
+  .metric{display:flex;gap:24px;margin-top:8px}
+  .metric div{background:#f6f3fb;border:1px solid var(--line);border-radius:10px;padding:14px 18px;flex:1}
+  .metric .n{font-size:30px;font-weight:800;color:var(--brand);letter-spacing:-.02em}
+  .metric .l{font-size:12px;color:var(--muted);margin-top:2px}
+  .cover{background:linear-gradient(135deg,#1a0f2e 0%,#3a1d6e 55%,#5b2b8a 100%);color:#fff;justify-content:center}
+  .cover h1{font-size:52px;color:#fff;max-width:18ch}
+  .cover .sub{color:#d9cdf0;font-size:19px}
+  .cover .kicker{color:#c7a8f0} .cover .kicker::before{background:#c7a8f0}
+  .cover .pagefoot{color:#b59fd6;border-top-color:rgba(255,255,255,.15)}
+  .cover .logo{color:#fff} .cover .logo b{color:#7fe9d6}
+  /* flow diagram */
+  .flow{display:flex;align-items:stretch;gap:0;margin-top:10px;flex-wrap:wrap}
+  .step{background:#f6f3fb;border:1px solid var(--line);border-radius:10px;padding:12px 14px;flex:1;min-width:120px;position:relative}
+  .step .t{font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--brand);margin-bottom:4px}
+  .step .d{font-size:12.5px;color:#2a2533;line-height:1.3}
+  .arrow{display:flex;align-items:center;justify-content:center;color:var(--brand2);font-size:22px;padding:0 8px}
+  .tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:20px;margin-top:7px}
+  .tag.llm{background:#ede3fb;color:var(--brand)} .tag.act{background:#d9f5ef;color:#0c7d6c}
+  .tag.hil{background:#fbeede;color:#a5601c}
+  .branch{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+  .branch .b{border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.35}
+  .b.review{background:#fbeede;border:1px solid #f0d9bf} .b.auto{background:#d9f5ef;border:1px solid #b9e8de}
+  .b .t{font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+  .note{font-size:13px;color:var(--muted);margin-top:auto;padding-top:14px}
+  @media print{
+    body{background:#fff} .slide{box-shadow:none;margin:0;border-radius:0;page-break-after:always;aspect-ratio:auto;height:100vh}
+    .deck{max-width:none}
+  }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- COVER -->
+  <section class="slide cover">
+    <div class="kicker">Jeen · Solution Engineer Home Assignment</div>
+    <h1>Claims Triage Agent for a UK General Insurer</h1>
+    <p class="sub">An AI agent that turns raw First-Notice-of-Loss submissions into governed, routed, and human-supervised claims — built end-to-end in n8n.</p>
+    <div class="pagefoot"><span class="logo">Albion<b>Mutual</b> · demo</span><span>Leslie Akpareva</span></div>
+  </section>
+
+  <!-- SLIDE 1 -->
+  <section class="slide">
+    <div class="kicker">Slide 1 · Customer Context &amp; Problem</div>
+    <h2>Albion Mutual — a mid-size UK motor &amp; home insurer</h2>
+    <div class="cols">
+      <div class="col">
+        <h3>Who is the customer</h3>
+        <ul>
+          <li>UK general insurer, ~400k policies across Motor, Home, Travel and Liability</li>
+          <li>FCA-regulated; claims handled by a contact-centre + a team of adjusters</li>
+          <li>First Notice of Loss (FNOL) arrives by web form, email and phone</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3>The problem</h3>
+        <ul>
+          <li class="warn">Every new claim is read and triaged <b>manually</b> before it reaches the right team</li>
+          <li class="warn">High-value, fraud-suspect and vulnerable-customer cases are easy to miss in the queue</li>
+          <li class="bad">Backlog → slow first response, inconsistent decisions, regulatory exposure</li>
+        </ul>
+      </div>
+    </div>
+    <div class="metric">
+      <div><div class="n">~60%</div><div class="l">of triage effort is low-value, repetitive reading</div></div>
+      <div><div class="n">FCA</div><div class="l">Consumer Duty: must identify &amp; protect vulnerable customers</div></div>
+      <div><div class="n">2026</div><div class="l">Why now: claims volume up, headcount flat, scrutiny rising</div></div>
+    </div>
+    <div class="pagefoot"><span class="logo">Albion<b>Mutual</b></span><span>1 / 5</span></div>
+  </section>
+
+  <!-- SLIDE 2 -->
+  <section class="slide">
+    <div class="kicker">Slide 2 · Why This Use Case</div>
+    <h2>Triage is the highest-leverage place to put an agent</h2>
+    <div class="cols">
+      <div class="col">
+        <h3>Current pain points</h3>
+        <ul>
+          <li class="warn">Manual classification &amp; routing of every FNOL</li>
+          <li class="warn">No consistent, auditable fraud-risk scoring at intake</li>
+          <li class="warn">Vulnerable customers identified late, if at all</li>
+          <li class="warn">Slow acknowledgement hurts customer trust</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3>Expected business value</h3>
+        <ul>
+          <li class="good">Straight-through processing of clean, low-value claims</li>
+          <li class="good">Adjusters spend time on the claims that need judgement</li>
+          <li class="good">Consistent fraud &amp; vulnerability flags on day one — audit trail in the system of record</li>
+          <li class="good">Faster first response, fewer SLA breaches</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note"><b>Why prioritise this:</b> it is low-risk to pilot (humans stay in the loop on anything sensitive), it touches a high-volume daily process, and it produces measurable wins — speed, consistency, and demonstrable Consumer-Duty compliance — within one quarter.</p>
+    <div class="pagefoot"><span class="logo">Albion<b>Mutual</b></span><span>2 / 5</span></div>
+  </section>
+
+  <!-- SLIDE 3 -->
+  <section class="slide">
+    <div class="kicker">Slide 3 · Agent Workflow Overview</div>
+    <h2>End-to-end flow in n8n</h2>
+    <div class="flow">
+      <div class="step"><div class="t">1 · Intake</div><div class="d">Claimant submits FNOL via web form</div></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="t">2 · AI Triage</div><div class="d">LLM classifies, scores fraud risk, flags vulnerability, recommends routing</div><span class="tag llm">LLM decision</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="t">3 · Record</div><div class="d">Claim written to Postgres system of record</div><span class="tag act">Action</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="t">4 · Route</div><div class="d">Rules decide: straight-through vs human review</div></div>
+    </div>
+    <div class="branch">
+      <div class="b review"><div class="t">If sensitive → Human in the loop</div>High value (≥£10k), fraud risk ≥60, or vulnerable customer → pauses for an <b>adjuster Approve / Reject</b> decision before anything else happens. <span class="tag hil" style="margin-top:6px">Human approval</span></div>
+      <div class="b auto"><div class="t">If clean → Auto-settle</div>Low-value, low-risk, non-vulnerable claims are fast-tracked automatically and the status is updated.</div>
+    </div>
+    <p class="note"><b>Systems / data:</b> n8n (orchestration) · OpenAI GPT-4o-mini (the decision step) · PostgreSQL (governed claims record) · Zoho SMTP (claimant acknowledgement email). <b>LLM role:</b> structured triage only — it never settles or rejects a claim. <b>Human approval:</b> applied to every high-value, high-fraud-risk or vulnerable-customer case.</p>
+    <div class="pagefoot"><span class="logo">Albion<b>Mutual</b></span><span>3 / 5</span></div>
+  </section>
+
+  <!-- SLIDE 4 -->
+  <section class="slide">
+    <div class="kicker">Slide 4 · Live Demo &amp; Results</div>
+    <h2>Four claims, four correct outcomes</h2>
+    <div class="cols">
+      <div class="col">
+        <h3>What I run live</h3>
+        <ul>
+          <li class="good"><b>Low-value motor scrape</b> → auto-settled, instant acknowledgement</li>
+          <li class="warn"><b>£46k kitchen fire</b> → held for adjuster approval</li>
+          <li class="bad"><b>Recently-incepted, round-number theft, "settle this week"</b> → flagged SIU-fraud, human review</li>
+          <li class="warn"><b>Bereaved 78-year-old</b> → vulnerability flag, routed to adjuster with care note</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3>What you see</h3>
+        <ul>
+          <li>Structured triage JSON from the LLM (type, severity, fraud score + reasons, vulnerability)</li>
+          <li>Row appears in the Postgres claims table — full audit trail</li>
+          <li>Sensitive claim pauses on an in-product adjuster review form</li>
+          <li>Claimant receives a branded acknowledgement email with a claim reference</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note"><b>Every decision is logged and reversible.</b> The agent accelerates the routine and surfaces the risky — it does not replace the adjuster.</p>
+    <div class="pagefoot"><span class="logo">Albion<b>Mutual</b></span><span>4 / 5</span></div>
+  </section>
+
+  <!-- SLIDE 5 -->
+  <section class="slide">
+    <div class="kicker">Slide 5 · Governance &amp; Fit</div>
+    <h2>From a pilot to production-grade, governed AI</h2>
+    <div class="cols">
+      <div class="col">
+        <h3>Why this is the Jeen story</h3>
+        <ul>
+          <li>One flow orchestrates <b>data + model + human oversight</b> — not a chatbot bolted on the side</li>
+          <li>The LLM is scoped to a decision; <b>actions and approvals are governed</b></li>
+          <li>Postgres gives a defensible <b>audit trail</b> for every claim and decision</li>
+          <li>Human-in-the-loop is a <b>routing rule</b>, not an afterthought</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3>Where it goes next</h3>
+        <ul>
+          <li>Add policy-system + fraud-database lookups as tools</li>
+          <li>RAG over policy wordings for coverage checks</li>
+          <li>Confidence thresholds &amp; model fallback for resilience</li>
+          <li>Dashboards on triage accuracy, STP rate, SLA &amp; vulnerable-customer outcomes</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note"><b>Deliverables provided:</b> exported n8n workflow (JSON) · full-workflow screenshot · successful-run screenshots · sample claim dataset · this deck.</p>
+    <div class="pagefoot"><span class="logo">Albion<b>Mutual</b></span><span>5 / 5</span></div>
+  </section>
+
+</div>
+<script>
+  // arrow-key scroll between slides
+  const slides=[...document.querySelectorAll('.slide')];let i=0;
+  addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key==='ArrowDown'){i=Math.min(i+1,slides.length-1);slides[i].scrollIntoView({behavior:'smooth'})}
+    if(e.key==='ArrowLeft'||e.key==='ArrowUp'){i=Math.max(i-1,0);slides[i].scrollIntoView({behavior:'smooth'})}
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+{
+  "id": "JeenClaimsTriageAPI1",
+  "name": "Albion Mutual — Claims Triage API (webhook)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "claims-triage",
+        "responseMode": "responseNode",
+        "options": { "allowedOrigins": "*" }
+      },
+      "id": "b1000000-0000-0000-0000-000000000001",
+      "name": "POST /claims-triage",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-260, 300],
+      "webhookId": "claims-triage-albion"
+    },
+    {
+      "parameters": {
+        "model": { "__rl": true, "mode": "list", "value": "gpt-4o-mini" },
+        "options": { "temperature": 0.2 }
+      },
+      "id": "b1000000-0000-0000-0000-000000000002",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [120, 520],
+      "credentials": { "openAiApi": { "id": "REPLACE_OPENAI_CRED", "name": "OpenAI (NAVADA)" } }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\"claim_type\", \"severity\", \"estimated_value\", \"fraud_risk\", \"fraud_reasons\", \"vulnerable_flag\", \"vulnerable_reason\", \"routing\", \"ai_summary\"],\n  \"properties\": {\n    \"claim_type\": { \"type\": \"string\", \"enum\": [\"Motor\", \"Home\", \"Travel\", \"Liability\", \"Other\"] },\n    \"severity\": { \"type\": \"string\", \"enum\": [\"Low\", \"Medium\", \"High\"] },\n    \"estimated_value\": { \"type\": \"number\" },\n    \"fraud_risk\": { \"type\": \"integer\" },\n    \"fraud_reasons\": { \"type\": \"string\" },\n    \"vulnerable_flag\": { \"type\": \"boolean\" },\n    \"vulnerable_reason\": { \"type\": \"string\" },\n    \"routing\": { \"type\": \"string\", \"enum\": [\"auto-settle\", \"adjuster\", \"SIU-fraud\"] },\n    \"ai_summary\": { \"type\": \"string\" }\n  }\n}"
+      },
+      "id": "b1000000-0000-0000-0000-000000000003",
+      "name": "Risk & Routing Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [320, 520]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the claims triage assistant for Albion Mutual, a UK general insurer regulated by the FCA. Analyse the First Notice of Loss (FNOL) below and return a structured triage decision.\n\nRules:\n- Classify claim_type and severity.\n- Score fraud_risk 0-100. Raise it for: inconsistent dates, vague or contradictory descriptions, recently incepted policies, round-number high values, prior-pattern language, or pressure to settle fast. Give a short fraud_reasons.\n- Set vulnerable_flag=true under FCA Consumer Duty if the description signals bereavement, serious illness, disability, mental-health distress, or financial hardship. Explain in vulnerable_reason.\n- Decide routing — auto-approve simple claims, escalate complex ones: 'auto-settle' ONLY for a simple, clearly low-risk claim UNDER £5000 with no vulnerability; 'adjuster' for anything complex, ANY claim of £5000 or more, or ANY vulnerable customer; 'SIU-fraud' if fraud_risk is high.\n- Write a concise ai_summary for the human adjuster.\n\n=== CLAIM ===\nPolicy Number: {{ $json.body.policy_number }}\nClaimant: {{ $json.body.claimant_name }} <{{ $json.body.claimant_email }}>\nIncident Type: {{ $json.body.incident_type }}\nIncident Date: {{ $json.body.incident_date }}\nEstimated Value (GBP): {{ $json.body.estimated_value }}\nDescription: {{ $json.body.description }}",
+        "hasOutputParser": true
+      },
+      "id": "b1000000-0000-0000-0000-000000000004",
+      "name": "AI Triage Decision",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [120, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c2", "name": "policy_number", "type": "string", "value": "={{ $('POST /claims-triage').item.json.body.policy_number }}" },
+            { "id": "c3", "name": "claimant_name", "type": "string", "value": "={{ $('POST /claims-triage').item.json.body.claimant_name }}" },
+            { "id": "c4", "name": "claimant_email", "type": "string", "value": "={{ $('POST /claims-triage').item.json.body.claimant_email }}" },
+            { "id": "c5", "name": "incident_type", "type": "string", "value": "={{ $('POST /claims-triage').item.json.body.incident_type }}" },
+            { "id": "c6", "name": "incident_date", "type": "string", "value": "={{ $('POST /claims-triage').item.json.body.incident_date }}" },
+            { "id": "c7", "name": "description", "type": "string", "value": "={{ $('POST /claims-triage').item.json.body.description }}" },
+            { "id": "c8", "name": "estimated_value", "type": "number", "value": "={{ Number($('POST /claims-triage').item.json.body.estimated_value) }}" },
+            { "id": "c9", "name": "claim_type", "type": "string", "value": "={{ $json.output.claim_type }}" },
+            { "id": "c10", "name": "severity", "type": "string", "value": "={{ $json.output.severity }}" },
+            { "id": "c11", "name": "fraud_risk", "type": "number", "value": "={{ $json.output.fraud_risk }}" },
+            { "id": "c12", "name": "fraud_reasons", "type": "string", "value": "={{ $json.output.fraud_reasons }}" },
+            { "id": "c13", "name": "vulnerable_flag", "type": "boolean", "value": "={{ $json.output.vulnerable_flag }}" },
+            { "id": "c14", "name": "vulnerable_reason", "type": "string", "value": "={{ $json.output.vulnerable_reason }}" },
+            { "id": "c15", "name": "routing", "type": "string", "value": "={{ $json.output.fraud_risk >= 60 ? 'SIU-fraud' : ((Number($('POST /claims-triage').item.json.body.estimated_value) >= 5000 || $json.output.vulnerable_flag === true || $json.output.severity === 'High') ? 'adjuster' : ((Number($('POST /claims-triage').item.json.body.estimated_value) < 1000 && $json.output.fraud_risk < 20 && $json.output.vulnerable_flag !== true && $json.output.severity === 'Low') ? 'auto-pay' : 'auto-settle')) }}" },
+            { "id": "c19", "name": "payout_amount", "type": "number", "value": "={{ (Number($('POST /claims-triage').item.json.body.estimated_value) < 1000 && $json.output.fraud_risk < 20 && $json.output.vulnerable_flag !== true && $json.output.severity === 'Low') ? Number($('POST /claims-triage').item.json.body.estimated_value) : 0 }}" },
+            { "id": "c16", "name": "ai_summary", "type": "string", "value": "={{ $json.output.ai_summary }}" },
+            { "id": "c17", "name": "status", "type": "string", "value": "={{ ($json.output.fraud_risk < 20 && Number($('POST /claims-triage').item.json.body.estimated_value) < 1000 && $json.output.vulnerable_flag !== true && $json.output.severity === 'Low') ? 'auto-paid' : (($json.output.fraud_risk < 60 && Number($('POST /claims-triage').item.json.body.estimated_value) < 5000 && $json.output.vulnerable_flag !== true && $json.output.severity !== 'High') ? 'auto-settled' : 'pending-human-review') }}" },
+            { "id": "c18", "name": "next_step", "type": "string", "value": "={{ $json.output.fraud_risk >= 60 ? 'Referred to the Special Investigations Unit. A specialist will review before any payment.' : ((Number($('POST /claims-triage').item.json.body.estimated_value) >= 5000 || $json.output.vulnerable_flag === true || $json.output.severity === 'High') ? 'Routed to a claims adjuster for human review and approval.' : ((Number($('POST /claims-triage').item.json.body.estimated_value) < 1000 && $json.output.fraud_risk < 20 && $json.output.vulnerable_flag !== true && $json.output.severity === 'Low') ? ('Approved and paid automatically — £' + Number($('POST /claims-triage').item.json.body.estimated_value) + ' will reach your account within 1 working day.') : 'Fast-tracked. A handler will confirm settlement within 2 working days.')) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1000000-0000-0000-0000-000000000005",
+      "name": "Build Claim Record",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": { "__rl": true, "mode": "list", "value": "jeen" },
+        "table": { "__rl": true, "mode": "list", "value": "claims" },
+        "columns": { "mappingMode": "autoMapInputData", "matchingColumns": ["claim_ref"] },
+        "options": {}
+      },
+      "id": "b1000000-0000-0000-0000-000000000006",
+      "name": "Insert Claim → Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [760, 300],
+      "credentials": { "postgres": { "id": "REPLACE_PG_CRED", "name": "NAVADA Postgres" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, claim_ref: $json.claim_ref, claim_type: $json.claim_type, severity: $json.severity, estimated_value: $json.estimated_value, fraud_risk: $json.fraud_risk, fraud_reasons: $json.fraud_reasons, vulnerable_flag: $json.vulnerable_flag, vulnerable_reason: $json.vulnerable_reason, routing: $json.routing, ai_summary: $json.ai_summary, status: $json.status, next_step: $json.next_step }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      },
+      "id": "b1000000-0000-0000-0000-000000000007",
+      "name": "Respond JSON",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1000, 300]
+    }
+  ],
+  "connections": {
+    "POST /claims-triage": { "main": [[{ "node": "AI Triage Decision", "type": "main", "index": 0 }]] },
+    "OpenAI Chat Model": { "ai_languageModel": [[{ "node": "AI Triage Decision", "type": "ai_languageModel", "index": 0 }]] },
+    "Risk & Routing Schema": { "ai_outputParser": [[{ "node": "AI Triage Decision", "type": "ai_outputParser", "index": 0 }]] },
+    "AI Triage Decision": { "main": [[{ "node": "Build Claim Record", "type": "main", "index": 0 }]] },
+    "Build Claim Record": { "main": [[{ "node": "Insert Claim → Postgres", "type": "main", "index": 0 }]] },
+    "Insert Claim → Postgres": { "main": [[{ "node": "Respond JSON", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

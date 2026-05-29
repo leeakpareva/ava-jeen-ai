@@ -1,0 +1,142 @@
+{
+  "id": "JeenKBSearch1",
+  "name": "Albion Mutual — Ava RAG (kb-search, pgvector + cache)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "kb-search", "responseMode": "responseNode", "options": { "allowedOrigins": "*" } },
+      "id": "g1000000-0000-0000-0000-000000000001",
+      "name": "POST /kb-search",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-400, 300],
+      "webhookId": "kb-search-albion"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT results::text AS cached FROM jeen.kb_cache WHERE q = lower(trim('{{ $json.body.query }}'));",
+        "options": {}
+      },
+      "id": "g1000000-0000-0000-0000-000000000002",
+      "name": "Cache Get",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [-180, 300],
+      "alwaysOutputData": true,
+      "credentials": { "postgres": { "id": "REPLACE_PGVEC_CRED", "name": "Jeen PGVector" } }
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": true, "typeValidation": "loose" }, "combinator": "and",
+          "conditions": [ { "id": "h1", "leftValue": "={{ $json.cached }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty", "singleValue": true } } ] },
+        "options": {}
+      },
+      "id": "g1000000-0000-0000-0000-000000000003",
+      "name": "Cached?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [40, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.cached }}",
+        "options": { "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" }, { "name": "Content-Type", "value": "application/json" }, { "name": "X-Cache", "value": "HIT" } ] } }
+      },
+      "id": "g1000000-0000-0000-0000-000000000004",
+      "name": "Respond (cache hit)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [260, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'text-embedding-3-small', input: $('POST /kb-search').item.json.body.query }) }}",
+        "options": {}
+      },
+      "id": "g1000000-0000-0000-0000-000000000005",
+      "name": "Embed Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 420],
+      "credentials": { "openAiApi": { "id": "REPLACE_OPENAI_CRED", "name": "OpenAI (NAVADA)" } }
+    },
+    {
+      "parameters": { "jsCode": "const e = $json.data[0].embedding;\nreturn [{ json: { vec: '[' + e.join(',') + ']' } }];" },
+      "id": "g1000000-0000-0000-0000-000000000006",
+      "name": "Vector Literal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 420]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT title, category, content, round((1 - (embedding <=> '{{ $json.vec }}'))::numeric, 3) AS score FROM jeen.kb ORDER BY embedding <=> '{{ $json.vec }}' LIMIT 3;",
+        "options": {}
+      },
+      "id": "g1000000-0000-0000-0000-000000000007",
+      "name": "KB Search",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [660, 420],
+      "alwaysOutputData": true,
+      "credentials": { "postgres": { "id": "REPLACE_PGVEC_CRED", "name": "Jeen PGVector" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.all().map(i => i.json);\nconst q = String($('POST /kb-search').first().json.body.query || '').toLowerCase().trim().replace(/'/g, \"''\");\nconst results_txt = JSON.stringify(r);\nconst results_sql = results_txt.replace(/'/g, \"''\");\nreturn [{ json: { q, results_txt, results_sql } }];"
+      },
+      "id": "g1000000-0000-0000-0000-000000000008",
+      "name": "Collect",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 420]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO jeen.kb_cache(q, results) VALUES('{{ $json.q }}', '{{ $json.results_sql }}'::jsonb) ON CONFLICT (q) DO UPDATE SET hits = jeen.kb_cache.hits + 1;",
+        "options": {}
+      },
+      "id": "g1000000-0000-0000-0000-000000000009",
+      "name": "Cache Put",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1060, 420],
+      "alwaysOutputData": true,
+      "credentials": { "postgres": { "id": "REPLACE_PGVEC_CRED", "name": "Jeen PGVector" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $('Collect').item.json.results_txt }}",
+        "options": { "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" }, { "name": "Content-Type", "value": "application/json" }, { "name": "X-Cache", "value": "MISS" } ] } }
+      },
+      "id": "g1000000-0000-0000-0000-000000000010",
+      "name": "Respond (fresh)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1260, 420]
+    }
+  ],
+  "connections": {
+    "POST /kb-search": { "main": [[{ "node": "Cache Get", "type": "main", "index": 0 }]] },
+    "Cache Get": { "main": [[{ "node": "Cached?", "type": "main", "index": 0 }]] },
+    "Cached?": { "main": [[{ "node": "Respond (cache hit)", "type": "main", "index": 0 }], [{ "node": "Embed Query", "type": "main", "index": 0 }]] },
+    "Embed Query": { "main": [[{ "node": "Vector Literal", "type": "main", "index": 0 }]] },
+    "Vector Literal": { "main": [[{ "node": "KB Search", "type": "main", "index": 0 }]] },
+    "KB Search": { "main": [[{ "node": "Collect", "type": "main", "index": 0 }]] },
+    "Collect": { "main": [[{ "node": "Cache Put", "type": "main", "index": 0 }]] },
+    "Cache Put": { "main": [[{ "node": "Respond (fresh)", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

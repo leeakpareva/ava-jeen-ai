@@ -1,0 +1,20 @@
+# dependencies / build output
+**/node_modules/
+react-app/dist/
+**/.wrangler/
+
+# secrets & environment (NEVER commit)
+**/.env
+**/.env.*
+!**/.env.example
+*.local.txt
+scripts/CREDENTIALS.local.txt
+scripts/creds.import.json
+scripts/pgvec.creds.json
+scripts/kb_seed.sql
+
+# os / logs
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<!--
+  index.html — the single HTML page Vite serves.
+  Loads /src/main.jsx (the React entry) and declares mobile/PWA meta:
+  viewport, theme-color, the web manifest and the Jeen icon (installable on phones).
+  Everything visible is rendered by React into <div id="root">.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5, viewport-fit=cover" />
+  <meta name="theme-color" content="#9a5fc0" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Jeen Triage" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/jeen-icon.svg" />
+  <link rel="icon" type="image/svg+xml" href="/jeen-icon.svg" />
+  <title>Albion Mutual · AI Claims Triage — powered by Jeen</title>
+  <meta name="description" content="A governed AI claims-triage agent built on self-hosted n8n. Submit a claim and watch it get classified, risk-scored and routed — with a human in the loop on anything sensitive." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>

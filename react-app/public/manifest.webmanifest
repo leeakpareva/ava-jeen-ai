@@ -1,0 +1,13 @@
+{
+  "name": "Jeen Triage — AI Claims Agent",
+  "short_name": "Jeen Triage",
+  "description": "A governed AI claims-triage agent. Report a claim conversationally and track its lifecycle.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#faf8fc",
+  "theme_color": "#9a5fc0",
+  "icons": [
+    { "src": "/jeen-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

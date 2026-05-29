@@ -1,0 +1,273 @@
+{
+  "id": "JeenClaimsTriage1",
+  "name": "Albion Mutual — Claims Triage Agent (FNOL)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Albion Mutual — Report a Claim (FNOL)",
+        "formDescription": "Tell us what happened. Our AI triage assistant will register your claim and route it to the right team.",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Policy Number", "placeholder": "e.g. ALB-MOT-882134", "requiredField": true },
+            { "fieldLabel": "Claimant Name", "requiredField": true },
+            { "fieldLabel": "Claimant Email", "fieldType": "email", "requiredField": true },
+            { "fieldLabel": "Incident Type", "fieldType": "dropdown", "fieldOptions": { "values": [ { "option": "Motor" }, { "option": "Home" }, { "option": "Travel" }, { "option": "Liability" } ] }, "requiredField": true },
+            { "fieldLabel": "Incident Date", "fieldType": "date", "requiredField": true },
+            { "fieldLabel": "Estimated Value (GBP)", "fieldType": "number", "requiredField": true },
+            { "fieldLabel": "Description of Incident", "fieldType": "textarea", "requiredField": true }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-0000-0000-000000000001",
+      "name": "Claim Form (FNOL)",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [-280, 300],
+      "webhookId": "albion-claim-fnol"
+    },
+    {
+      "parameters": {
+        "model": { "__rl": true, "mode": "list", "value": "gpt-4o-mini" },
+        "options": { "temperature": 0.2 }
+      },
+      "id": "a1000000-0000-0000-0000-000000000002",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [120, 520],
+      "credentials": { "openAiApi": { "id": "REPLACE_OPENAI_CRED", "name": "OpenAI (NAVADA)" } }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"required\": [\"claim_type\", \"severity\", \"estimated_value\", \"fraud_risk\", \"fraud_reasons\", \"vulnerable_flag\", \"vulnerable_reason\", \"routing\", \"ai_summary\"],\n  \"properties\": {\n    \"claim_type\": { \"type\": \"string\", \"enum\": [\"Motor\", \"Home\", \"Travel\", \"Liability\", \"Other\"] },\n    \"severity\": { \"type\": \"string\", \"enum\": [\"Low\", \"Medium\", \"High\"] },\n    \"estimated_value\": { \"type\": \"number\", \"description\": \"Estimated claim value in GBP\" },\n    \"fraud_risk\": { \"type\": \"integer\", \"description\": \"Fraud risk score 0-100\" },\n    \"fraud_reasons\": { \"type\": \"string\", \"description\": \"Short reason for the fraud risk score\" },\n    \"vulnerable_flag\": { \"type\": \"boolean\", \"description\": \"True if claimant shows signs of vulnerability (bereavement, distress, health, financial hardship) per FCA Consumer Duty\" },\n    \"vulnerable_reason\": { \"type\": \"string\", \"description\": \"Why the claimant may be vulnerable, or 'none'\" },\n    \"routing\": { \"type\": \"string\", \"enum\": [\"auto-settle\", \"adjuster\", \"SIU-fraud\"], \"description\": \"Which team should handle the claim\" },\n    \"ai_summary\": { \"type\": \"string\", \"description\": \"One-paragraph plain-English triage summary for the adjuster\" }\n  }\n}"
+      },
+      "id": "a1000000-0000-0000-0000-000000000003",
+      "name": "Risk & Routing Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [320, 520]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the claims triage assistant for Albion Mutual, a UK general insurer regulated by the FCA. Analyse the First Notice of Loss (FNOL) below and return a structured triage decision.\n\nRules:\n- Classify claim_type and severity.\n- Score fraud_risk 0-100. Raise it for: inconsistent dates, vague or contradictory descriptions, recently incepted policies, round-number high values, prior-pattern language, or pressure to settle fast. Give a short fraud_reasons.\n- Set vulnerable_flag=true under FCA Consumer Duty if the description signals bereavement, serious illness, disability, mental-health distress, or financial hardship. Explain in vulnerable_reason.\n- Decide routing: 'auto-settle' only for clearly low-risk, low-value, non-vulnerable claims; 'adjuster' for high value or vulnerable customers; 'SIU-fraud' if fraud_risk is high.\n- Write a concise ai_summary for the human adjuster.\n\n=== CLAIM ===\nPolicy Number: {{ $json['Policy Number'] }}\nClaimant: {{ $json['Claimant Name'] }} <{{ $json['Claimant Email'] }}>\nIncident Type: {{ $json['Incident Type'] }}\nIncident Date: {{ $json['Incident Date'] }}\nEstimated Value (GBP): {{ $json['Estimated Value (GBP)'] }}\nDescription: {{ $json['Description of Incident'] }}",
+        "hasOutputParser": true
+      },
+      "id": "a1000000-0000-0000-0000-000000000004",
+      "name": "AI Triage Decision",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [120, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "claim_ref", "type": "string", "value": "={{ 'ALB-' + $now.toFormat('yyyyLLdd') + '-' + Math.floor(1000 + ($runIndex + $itemIndex + ($now.toMillis() % 9000))) }}" },
+            { "id": "c2", "name": "policy_number", "type": "string", "value": "={{ $('Claim Form (FNOL)').item.json['Policy Number'] }}" },
+            { "id": "c3", "name": "claimant_name", "type": "string", "value": "={{ $('Claim Form (FNOL)').item.json['Claimant Name'] }}" },
+            { "id": "c4", "name": "claimant_email", "type": "string", "value": "={{ $('Claim Form (FNOL)').item.json['Claimant Email'] }}" },
+            { "id": "c5", "name": "incident_type", "type": "string", "value": "={{ $('Claim Form (FNOL)').item.json['Incident Type'] }}" },
+            { "id": "c6", "name": "incident_date", "type": "string", "value": "={{ $('Claim Form (FNOL)').item.json['Incident Date'] }}" },
+            { "id": "c7", "name": "description", "type": "string", "value": "={{ $('Claim Form (FNOL)').item.json['Description of Incident'] }}" },
+            { "id": "c8", "name": "estimated_value", "type": "number", "value": "={{ $('Claim Form (FNOL)').item.json['Estimated Value (GBP)'] }}" },
+            { "id": "c9", "name": "claim_type", "type": "string", "value": "={{ $json.output.claim_type }}" },
+            { "id": "c10", "name": "severity", "type": "string", "value": "={{ $json.output.severity }}" },
+            { "id": "c11", "name": "fraud_risk", "type": "number", "value": "={{ $json.output.fraud_risk }}" },
+            { "id": "c12", "name": "fraud_reasons", "type": "string", "value": "={{ $json.output.fraud_reasons }}" },
+            { "id": "c13", "name": "vulnerable_flag", "type": "boolean", "value": "={{ $json.output.vulnerable_flag }}" },
+            { "id": "c14", "name": "vulnerable_reason", "type": "string", "value": "={{ $json.output.vulnerable_reason }}" },
+            { "id": "c15", "name": "routing", "type": "string", "value": "={{ $json.output.routing }}" },
+            { "id": "c16", "name": "ai_summary", "type": "string", "value": "={{ $json.output.ai_summary }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-0000-0000-000000000005",
+      "name": "Build Claim Record",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": { "__rl": true, "mode": "list", "value": "jeen" },
+        "table": { "__rl": true, "mode": "list", "value": "claims" },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": ["claim_ref"]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-0000-0000-000000000006",
+      "name": "Insert Claim → Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [760, 300],
+      "credentials": { "postgres": { "id": "REPLACE_PG_CRED", "name": "NAVADA Postgres" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "combinator": "or",
+          "conditions": [
+            { "id": "i1", "leftValue": "={{ $json.routing }}", "rightValue": "auto-settle", "operator": { "type": "string", "operation": "notEquals" } },
+            { "id": "i2", "leftValue": "={{ $json.vulnerable_flag }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } },
+            { "id": "i3", "leftValue": "={{ $json.estimated_value }}", "rightValue": 10000, "operator": { "type": "number", "operation": "gte" } },
+            { "id": "i4", "leftValue": "={{ $json.fraud_risk }}", "rightValue": 60, "operator": { "type": "number", "operation": "gte" } }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-0000-0000-000000000007",
+      "name": "Needs Human Review?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Adjuster Review — Claim {{ $json.claim_ref }}",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Decision", "fieldType": "dropdown", "fieldOptions": { "values": [ { "option": "Approve" }, { "option": "Reject" }, { "option": "Request more info" } ] }, "requiredField": true },
+            { "fieldLabel": "Adjuster Notes", "fieldType": "textarea" }
+          ]
+        },
+        "options": {
+          "formTitle": "Adjuster Review",
+          "formDescription": "AI triage flagged this claim for human review. Summary: {{ $json.ai_summary }} | Fraud risk: {{ $json.fraud_risk }}/100 | Vulnerable: {{ $json.vulnerable_flag }} | Value: £{{ $json.estimated_value }}"
+        }
+      },
+      "id": "a1000000-0000-0000-0000-000000000008",
+      "name": "Adjuster Approval (Wait)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1240, 180]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "d1", "name": "status", "type": "string", "value": "reviewed" },
+            { "id": "d2", "name": "adjuster_decision", "type": "string", "value": "={{ $json.Decision }}" },
+            { "id": "d3", "name": "adjuster_notes", "type": "string", "value": "={{ $json['Adjuster Notes'] }}" },
+            { "id": "d4", "name": "claim_ref", "type": "string", "value": "={{ $('Build Claim Record').item.json.claim_ref }}" },
+            { "id": "d5", "name": "claimant_name", "type": "string", "value": "={{ $('Build Claim Record').item.json.claimant_name }}" },
+            { "id": "d6", "name": "claimant_email", "type": "string", "value": "={{ $('Build Claim Record').item.json.claimant_email }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-0000-0000-000000000009",
+      "name": "Apply Adjuster Decision",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1480, 180]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": { "__rl": true, "mode": "list", "value": "jeen" },
+        "table": { "__rl": true, "mode": "list", "value": "claims" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "claim_ref": "={{ $json.claim_ref }}",
+            "status": "={{ $json.status }}",
+            "adjuster_decision": "={{ $json.adjuster_decision }}",
+            "adjuster_notes": "={{ $json.adjuster_notes }}"
+          },
+          "matchingColumns": ["claim_ref"]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-0000-0000-000000000010",
+      "name": "Update: Reviewed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1720, 180],
+      "credentials": { "postgres": { "id": "REPLACE_PG_CRED", "name": "NAVADA Postgres" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "e1", "name": "status", "type": "string", "value": "auto-settled" },
+            { "id": "e2", "name": "adjuster_decision", "type": "string", "value": "Auto-approved (low risk)" },
+            { "id": "e3", "name": "claim_ref", "type": "string", "value": "={{ $('Build Claim Record').item.json.claim_ref }}" },
+            { "id": "e4", "name": "claimant_name", "type": "string", "value": "={{ $('Build Claim Record').item.json.claimant_name }}" },
+            { "id": "e5", "name": "claimant_email", "type": "string", "value": "={{ $('Build Claim Record').item.json.claimant_email }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-0000-0000-000000000011",
+      "name": "Auto-Approve",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1240, 420]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": { "__rl": true, "mode": "list", "value": "jeen" },
+        "table": { "__rl": true, "mode": "list", "value": "claims" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "claim_ref": "={{ $json.claim_ref }}",
+            "status": "={{ $json.status }}",
+            "adjuster_decision": "={{ $json.adjuster_decision }}"
+          },
+          "matchingColumns": ["claim_ref"]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-0000-0000-000000000012",
+      "name": "Update: Auto-Approved",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1480, 420],
+      "credentials": { "postgres": { "id": "REPLACE_PG_CRED", "name": "NAVADA Postgres" } }
+    },
+    {
+      "parameters": {
+        "fromEmail": "claude.navada@zohomail.eu",
+        "toEmail": "={{ $json.claimant_email }}",
+        "subject": "=Your Albion Mutual claim {{ $json.claim_ref }} has been received",
+        "emailFormat": "html",
+        "html": "=<div style=\"font-family:Arial,sans-serif;color:#1a1a1a;max-width:560px\"><h2 style=\"color:#5b2b8a\">Albion Mutual</h2><p>Dear {{ $json.claimant_name }},</p><p>Thank you for reporting your claim. We have registered it and our team is reviewing it now.</p><p><strong>Your claim reference:</strong> {{ $json.claim_ref }}<br><strong>Current status:</strong> {{ $json.status }}</p><p>{{ $json.adjuster_decision === 'Auto-approved (low risk)' ? 'Your claim has been fast-tracked and a handler will be in touch within 2 working days.' : 'Your claim is with a claims handler for review. We will contact you within 3 working days.' }}</p><p>If you need to reach us, quote your claim reference above.</p><p>Kind regards,<br>Albion Mutual Claims Team</p></div>",
+        "options": {}
+      },
+      "id": "a1000000-0000-0000-0000-000000000013",
+      "name": "Email Claimant Acknowledgement",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1960, 300],
+      "credentials": { "smtp": { "id": "REPLACE_SMTP_CRED", "name": "NAVADA Zoho SMTP" } }
+    }
+  ],
+  "connections": {
+    "Claim Form (FNOL)": { "main": [[{ "node": "AI Triage Decision", "type": "main", "index": 0 }]] },
+    "OpenAI Chat Model": { "ai_languageModel": [[{ "node": "AI Triage Decision", "type": "ai_languageModel", "index": 0 }]] },
+    "Risk & Routing Schema": { "ai_outputParser": [[{ "node": "AI Triage Decision", "type": "ai_outputParser", "index": 0 }]] },
+    "AI Triage Decision": { "main": [[{ "node": "Build Claim Record", "type": "main", "index": 0 }]] },
+    "Build Claim Record": { "main": [[{ "node": "Insert Claim → Postgres", "type": "main", "index": 0 }]] },
+    "Insert Claim → Postgres": { "main": [[{ "node": "Needs Human Review?", "type": "main", "index": 0 }]] },
+    "Needs Human Review?": { "main": [[{ "node": "Adjuster Approval (Wait)", "type": "main", "index": 0 }], [{ "node": "Auto-Approve", "type": "main", "index": 0 }]] },
+    "Adjuster Approval (Wait)": { "main": [[{ "node": "Apply Adjuster Decision", "type": "main", "index": 0 }]] },
+    "Apply Adjuster Decision": { "main": [[{ "node": "Update: Reviewed", "type": "main", "index": 0 }]] },
+    "Update: Reviewed": { "main": [[{ "node": "Email Claimant Acknowledgement", "type": "main", "index": 0 }]] },
+    "Auto-Approve": { "main": [[{ "node": "Update: Auto-Approved", "type": "main", "index": 0 }]] },
+    "Update: Auto-Approved": { "main": [[{ "node": "Email Claimant Acknowledgement", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

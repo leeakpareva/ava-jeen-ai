@@ -1,0 +1,170 @@
+{
+  "id": "JeenAdminAPI1",
+  "name": "Albion Mutual — Admin API (login · claims · decisions)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "admin-login", "responseMode": "responseNode", "options": { "allowedOrigins": "*" } },
+      "id": "e1000000-0000-0000-0000-000000000001",
+      "name": "POST /admin-login",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-300, 0],
+      "webhookId": "admin-login-albion"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT full_name, role FROM jeen.admin_users WHERE username = '{{ $json.body.username }}' AND password_hash = md5('{{ $json.body.password }}') LIMIT 1;",
+        "options": {}
+      },
+      "id": "e1000000-0000-0000-0000-000000000002",
+      "name": "Auth Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [-60, 0],
+      "alwaysOutputData": true,
+      "credentials": { "postgres": { "id": "REPLACE_PG_CRED", "name": "NAVADA Postgres" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.full_name ? { ok:true, token:'REPLACE_ADMIN_TOKEN', user:$json.full_name, role:$json.role } : { ok:false, error:'Invalid username or password' }) }}",
+        "options": { "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] } }
+      },
+      "id": "e1000000-0000-0000-0000-000000000003",
+      "name": "Login Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [200, 0]
+    },
+
+    {
+      "parameters": { "httpMethod": "GET", "path": "claims-admin", "responseMode": "responseNode", "options": { "allowedOrigins": "*" } },
+      "id": "e1000000-0000-0000-0000-000000000004",
+      "name": "GET /claims-admin",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-300, 240],
+      "webhookId": "claims-admin-albion"
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": true, "typeValidation": "loose" }, "combinator": "and",
+          "conditions": [ { "id": "a1", "leftValue": "={{ $json.query.token }}", "rightValue": "REPLACE_ADMIN_TOKEN", "operator": { "type": "string", "operation": "equals" } } ] },
+        "options": {}
+      },
+      "id": "e1000000-0000-0000-0000-000000000005",
+      "name": "Auth?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-60, 240]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT claim_ref, to_char(received_at,'YYYY-MM-DD HH24:MI') AS received, claimant_name, claimant_email, policy_number, incident_type, incident_date::text AS incident_date, description, claim_type, severity, fraud_risk, fraud_reasons, vulnerable_flag, vulnerable_reason, routing, status, adjuster_decision, adjuster_notes, estimated_value, ai_summary, next_step FROM jeen.claims ORDER BY id DESC LIMIT 200;",
+        "options": {}
+      },
+      "id": "e1000000-0000-0000-0000-000000000006",
+      "name": "List Claims",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [200, 160],
+      "alwaysOutputData": true,
+      "credentials": { "postgres": { "id": "REPLACE_PG_CRED", "name": "NAVADA Postgres" } }
+    },
+    {
+      "parameters": { "respondWith": "allIncomingItems", "options": { "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] } } },
+      "id": "e1000000-0000-0000-0000-000000000007",
+      "name": "Claims Data",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [440, 160]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok:false, error:'Unauthorized' }) }}",
+        "options": { "responseCode": 401, "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] } }
+      },
+      "id": "e1000000-0000-0000-0000-000000000008",
+      "name": "Denied (list)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [200, 360]
+    },
+
+    {
+      "parameters": { "httpMethod": "POST", "path": "claims-decision", "responseMode": "responseNode", "options": { "allowedOrigins": "*" } },
+      "id": "e1000000-0000-0000-0000-000000000009",
+      "name": "POST /claims-decision",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-300, 520],
+      "webhookId": "claims-decision-albion"
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": true, "typeValidation": "loose" }, "combinator": "and",
+          "conditions": [ { "id": "a2", "leftValue": "={{ $json.body.token }}", "rightValue": "REPLACE_ADMIN_TOKEN", "operator": { "type": "string", "operation": "equals" } } ] },
+        "options": {}
+      },
+      "id": "e1000000-0000-0000-0000-000000000010",
+      "name": "Auth2?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-60, 520]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE jeen.claims SET status = '{{ $json.body.decision == \"approve\" ? \"approved\" : \"rejected\" }}', adjuster_decision = '{{ $json.body.decision == \"approve\" ? \"Approved by admin\" : \"Rejected by admin\" }}', adjuster_notes = '{{ ($json.body.notes || \"\").toString().replace(/\\x27/g, \"\") }}', updated_at = now() WHERE claim_ref = '{{ $json.body.claim_ref }}' RETURNING claim_ref, status;",
+        "options": {}
+      },
+      "id": "e1000000-0000-0000-0000-000000000011",
+      "name": "Update Decision",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [200, 440],
+      "alwaysOutputData": true,
+      "credentials": { "postgres": { "id": "REPLACE_PG_CRED", "name": "NAVADA Postgres" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok:true, claim_ref: $json.claim_ref, status: $json.status }) }}",
+        "options": { "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] } }
+      },
+      "id": "e1000000-0000-0000-0000-000000000012",
+      "name": "Decision Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [440, 440]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok:false, error:'Unauthorized' }) }}",
+        "options": { "responseCode": 401, "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] } }
+      },
+      "id": "e1000000-0000-0000-0000-000000000013",
+      "name": "Denied (decision)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [200, 640]
+    }
+  ],
+  "connections": {
+    "POST /admin-login": { "main": [[{ "node": "Auth Query", "type": "main", "index": 0 }]] },
+    "Auth Query": { "main": [[{ "node": "Login Result", "type": "main", "index": 0 }]] },
+    "GET /claims-admin": { "main": [[{ "node": "Auth?", "type": "main", "index": 0 }]] },
+    "Auth?": { "main": [[{ "node": "List Claims", "type": "main", "index": 0 }], [{ "node": "Denied (list)", "type": "main", "index": 0 }]] },
+    "List Claims": { "main": [[{ "node": "Claims Data", "type": "main", "index": 0 }]] },
+    "POST /claims-decision": { "main": [[{ "node": "Auth2?", "type": "main", "index": 0 }]] },
+    "Auth2?": { "main": [[{ "node": "Update Decision", "type": "main", "index": 0 }], [{ "node": "Denied (decision)", "type": "main", "index": 0 }]] },
+    "Update Decision": { "main": [[{ "node": "Decision Result", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

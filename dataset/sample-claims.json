@@ -1,0 +1,62 @@
+[
+  {
+    "scenario": "Low-risk → AUTO-SETTLE",
+    "Policy Number": "ALB-MOT-441902",
+    "Claimant Name": "Daniel Hughes",
+    "Claimant Email": "leeakpareva@gmail.com",
+    "Incident Type": "Motor",
+    "Incident Date": "2026-05-21",
+    "Estimated Value (GBP)": 480,
+    "Description of Incident": "Minor car park scrape on the rear bumper of my Ford Focus while parked at the supermarket. Small scratch and a cracked indicator cover. No other vehicle involved, no injuries. Policy held for 4 years."
+  },
+  {
+    "scenario": "High value → ADJUSTER",
+    "Policy Number": "ALB-HOM-778145",
+    "Claimant Name": "Priya Nair",
+    "Claimant Email": "leeakpareva@gmail.com",
+    "Incident Type": "Home",
+    "Incident Date": "2026-05-18",
+    "Estimated Value (GBP)": 46000,
+    "Description of Incident": "A kitchen fire caused by a faulty dishwasher spread to the adjoining rooms. Significant smoke and water damage to the ground floor, kitchen units destroyed, and we have had to move into temporary accommodation. Fire brigade attended and have a report."
+  },
+  {
+    "scenario": "Fraud signals → SIU-FRAUD",
+    "Policy Number": "ALB-MOT-902551",
+    "Claimant Name": "Marcus Webb",
+    "Claimant Email": "leeakpareva@gmail.com",
+    "Incident Type": "Motor",
+    "Incident Date": "2026-05-26",
+    "Estimated Value (GBP)": 9000,
+    "Description of Incident": "Car was stolen from outside a friend's house, total loss. I need this settled as quickly as possible, ideally this week. The car was worth exactly 9000. Policy was taken out recently. I do not have the second key or the purchase receipt anymore."
+  },
+  {
+    "scenario": "Vulnerable customer (FCA) → ADJUSTER",
+    "Policy Number": "ALB-HOM-330218",
+    "Claimant Name": "Eileen Roberts",
+    "Claimant Email": "leeakpareva@gmail.com",
+    "Incident Type": "Home",
+    "Incident Date": "2026-05-20",
+    "Estimated Value (GBP)": 3200,
+    "Description of Incident": "My husband passed away last month and while clearing the house I discovered a burst pipe had damaged the bedroom carpet and ceiling. I am 78, recently bereaved and finding all of this very difficult to deal with on my own. I am not sure what I am supposed to do next."
+  },
+  {
+    "scenario": "Medium travel → AUTO/ADJUSTER (judgement)",
+    "Policy Number": "ALB-TRA-561023",
+    "Claimant Name": "Tom Bedford",
+    "Claimant Email": "leeakpareva@gmail.com",
+    "Incident Type": "Travel",
+    "Incident Date": "2026-05-12",
+    "Estimated Value (GBP)": 1450,
+    "Description of Incident": "Checked baggage was lost by the airline on a flight back from Spain and never recovered. Claiming for clothing, a laptop and toiletries. I have the property irregularity report from the airline and receipts for the main items."
+  },
+  {
+    "scenario": "Liability moderate → ADJUSTER",
+    "Policy Number": "ALB-LIA-114788",
+    "Claimant Name": "Sandra Okafor",
+    "Claimant Email": "leeakpareva@gmail.com",
+    "Incident Type": "Liability",
+    "Incident Date": "2026-05-15",
+    "Estimated Value (GBP)": 7800,
+    "Description of Incident": "A visitor slipped on a loose paving slab on my property and fractured their wrist. They are now claiming against my home liability cover for medical costs and lost earnings. I have photos of the paving and their solicitor has been in touch."
+  }
+]

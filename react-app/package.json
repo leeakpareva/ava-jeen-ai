@@ -1,0 +1,24 @@
+{
+  "name": "albion-claims-triage",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Albion Mutual — AI Claims Triage Agent demo (powered by Jeen). Live React portal over a self-hosted n8n agent.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173"
+  },
+  "dependencies": {
+    "@clerk/clerk-react": "^5.61.8",
+    "@n8n/chat": "^1.22.0",
+    "@remotion/player": "^4.0.469",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.469"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}
