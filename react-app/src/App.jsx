@@ -21,7 +21,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { PRODUCT, PROFILE, NAVADA, N8N_WORKFLOW_URL } from "./data.js";
 import { Icon } from "./icons.jsx";
 import { useClerk, useUser, SignedIn, SignedOut } from "@clerk/clerk-react";
-import { Overview, Demo, HowItWorks, DataSecurity, Assignment, Admin, Account, Presentation } from "./pages.jsx";
+import { Overview, Demo, HowItWorks, DataSecurity, Assignment, Admin, Account, Presentation, TeamConsole } from "./pages.jsx";
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -79,6 +79,7 @@ const NAV = [
   ["security", "Data & Security", "Governance, GDPR, DPA"],
   ["account", "My Claims", "Customer portal"],
   ["admin", "Admin", "Operations console"],
+  ["team", "Team Console", "Adjuster · Legal · Finance"],
   ["assignment", "Assignment", "The Jeen brief"],
   ["present", "Present", "Interactive deck"],
 ];
@@ -123,7 +124,7 @@ function SidePanel({ open, route, onClose }) {
                 <span className="sp-l">{l}</span><span className="sp-d">{d}</span>
               </a>
               {i === 0 && (
-                <a href={N8N_WORKFLOW_URL} target="_blank" rel="noreferrer" className="sp-link sp-ext" onClick={onClose}>
+                <a href={N8N_WORKFLOW_URL} target="_blank" rel="noreferrer" className="sp-link sp-ext" onClick={() => { onClose(); window.dispatchEvent(new Event("ava-launch")); }}>
                   <span className="sp-l"><Icon name="gear" size={15} /> Live n8n workflow</span><span className="sp-d">Open the agent in n8n ↗</span>
                 </a>
               )}
@@ -194,12 +195,45 @@ function Footer() {
   );
 }
 
+/* ---------- Splash / loader: white background + the brand mark ----------
+ * Shown on first app load and again briefly when the Admin or Team consoles
+ * (and the live n8n workflow) are "launched" — a small touch that makes the
+ * product feel mature and considered rather than snapping in cold. Any
+ * component can trigger it with window.dispatchEvent(new Event('ava-launch')). */
+function Splash({ show }) {
+  return (
+    <div className={`splash ${show ? "on" : ""}`} aria-hidden={!show}>
+      <div className="splash-mark">
+        <JeenLogo size={64} />
+        <div className="splash-name">{PRODUCT.name}<span>{PRODUCT.sub}</span></div>
+        <div className="splash-bar"><i /></div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const route = useHashRoute();
+  const [boot, setBoot] = useState(true);        // initial-load splash
+  const [launching, setLaunching] = useState(false); // route / external launch splash
+
+  useEffect(() => { const t = setTimeout(() => setBoot(false), 1050); return () => clearTimeout(t); }, []);
+  // External launch (e.g. opening the live n8n workflow) fires this event.
+  useEffect(() => {
+    const on = () => setLaunching(true);
+    window.addEventListener("ava-launch", on);
+    return () => window.removeEventListener("ava-launch", on);
+  }, []);
+  // Show the splash when entering the Admin or Team consoles.
+  useEffect(() => { if (route === "admin" || route === "team") setLaunching(true); }, [route]);
+  // Auto-clear any launch splash shortly after it shows.
+  useEffect(() => { if (launching) { const t = setTimeout(() => setLaunching(false), 820); return () => clearTimeout(t); } }, [launching]);
+
   if (route === "present") return <Presentation />;
-  const Page = { overview: Overview, demo: Demo, how: HowItWorks, security: DataSecurity, admin: Admin, account: Account, assignment: Assignment }[route] || Overview;
+  const Page = { overview: Overview, demo: Demo, how: HowItWorks, security: DataSecurity, admin: Admin, account: Account, assignment: Assignment, team: TeamConsole }[route] || Overview;
   return (
     <>
+      <Splash show={boot || launching} />
       <Nav route={route} />
       <main className="page" key={route}><Page /></main>
       <Footer />

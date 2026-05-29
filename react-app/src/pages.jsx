@@ -32,6 +32,7 @@ import {
   PROFILE, NAVADA, ASSIGNMENT, SECURITY, PRODUCT,
   CHAT_URL, ADMIN_LOGIN_URL, CLAIMS_ADMIN_URL, DECISION_URL,
   USER_LOGIN_URL, USER_CLAIMS_URL, CONVOS_ADMIN_URL, N8N_WORKFLOW_URL, LIFECYCLE_STAGES,
+  TEAM_LOGIN_URL, TEAM_CLAIMS_URL, TEAM_ACTION_URL, TEAMS, N8N_BASE,
 } from "./data.js";
 
 const routeClass = (r) => (r === "auto-settle" || r === "auto-pay" ? "route-auto" : r === "SIU-fraud" ? "route-fraud" : "route-adjuster");
@@ -130,6 +131,10 @@ export function Overview() {
           </Reveal>
           <Reveal className="diagram-wrap">
             <img src="/shots/ava-diagram.png" alt="Ava — AI Intake Agent workflow: intake, AI agent with tools &amp; RAG, routing, Postgres and human-in-the-loop" />
+          </Reveal>
+          <Reveal delay={2} className="canvasshot">
+            <img src="/shots/workflow-canvas.png" alt="The live Ava workflow on the n8n canvas — webhook intake, the Ava AI Agent with model, memory, Calculator, Wikipedia and Knowledge-Base (RAG) tools, decision routing, Postgres insert, claimant email and team handoff." />
+            <p className="shotcap">The real workflow on our n8n canvas — exactly what we built and run. Ava (the AI Agent) sits at the centre with her model, memory and three tools; the chain to the right registers the claim, writes it to PostgreSQL, emails the claimant and hands off to the assigned team.</p>
           </Reveal>
         </div>
       </section>
@@ -455,12 +460,23 @@ export function HowItWorks() {
           <div className="proofcopy">
             <div className="eyebrow">Proof · live</div>
             <h2 style={{ fontSize: 28 }}>It actually runs.</h2>
-            <p className="sublead">A real end-to-end execution on our self-hosted n8n — every node green, including the human-in-the-loop branch. Open it and watch it run.</p>
-            <a href={N8N_WORKFLOW_URL} target="_blank" rel="noreferrer" className="btn grad"><Icon name="gear" size={16} /> Open the live workflow ↗</a>
+            <p className="sublead">This isn't a mock-up. Every claim runs through the same governed sequence on our self-hosted n8n — and you can open the live workflow and watch it execute.</p>
+            <a href={N8N_WORKFLOW_URL} target="_blank" rel="noreferrer" className="btn grad" onClick={() => window.dispatchEvent(new Event("ava-launch"))}><Icon name="gear" size={16} /> Open the live workflow ↗</a>
           </div>
-          <div className="frame">
-            <div className="frame-bar"><i /><i /><i /><span className="fu">n8n.navada-edge-server.uk · Ava — Conversational Intake Agent</span></div>
-            <img src="/shots/ava-workflow.png" alt="The Ava AI agent workflow in n8n" />
+          <div className="ava-runtime">
+            <div className="rt-title"><AvaAvatar size={28} online /><b>Ava at runtime</b><span className="rt-live"><i /> live</span></div>
+            {[
+              "Reads the claimant's message in full context — she remembers the conversation (Postgres chat memory).",
+              "Reaches for a tool when it helps — Calculator for sums, Wikipedia for general facts, the Knowledge Base (RAG) for Albion's own cover, excess and rules.",
+              "Replies as strict, schema-constrained JSON — never free-form text the rest of the flow can't trust.",
+              "A deterministic rule (not the model) decides accept · refer · decline and picks the team.",
+              "Writes the claim to PostgreSQL with a sequential reference and a full audit trail.",
+              "Emails the claimant, alerts the assigned team, and the claim moves down the queue.",
+            ].map((t, i) => (
+              <div className="rt-step" key={i} style={{ animationDelay: `${0.15 + i * 0.12}s` }}>
+                <span className="rt-dot" /><span>{t}</span>
+              </div>
+            ))}
           </div>
         </Reveal>
       </div>
@@ -911,6 +927,186 @@ function FallbackAccount() {
 }
 
 export function Account() { return CLERK_KEY ? <ClerkAccount /> : <FallbackAccount />; }
+
+/* ============================ TEAM CONSOLE ============================ */
+/**
+ * TeamConsole — the per-team workspace that lets human teams "plug into" the
+ * agent's workflow without ever touching the n8n editor.
+ *
+ * WHAT: a team member (Claims Adjuster / Legal / Finance) signs in, sees ONLY
+ *       the claims Ava routed to their queue, and takes the action that belongs
+ *       to their team (approve, decline, clear fraud, uphold appeal, release
+ *       payment, request info).
+ * HOW:  POST /team-login authenticates against jeen.team_users and returns a
+ *       token + the team name. GET /team-claims?team= lists that team's queue.
+ *       POST /team-action updates the claim, writes an audit event, hands the
+ *       claim to the next team, and triggers Ava to email the claimant.
+ * WHY:  this is how a connected, multi-team claims workflow actually works — the
+ *       claim moves between teams, each team acts in turn, and the customer is
+ *       kept informed automatically. Approving here makes the claim leave this
+ *       queue and appear in the next team's queue (e.g. Adjuster → Finance).
+ */
+export function TeamConsole() {
+  const [token, setToken] = useState(() => sessionStorage.getItem("jeen_team_token") || "");
+  const [team, setTeam] = useState(() => sessionStorage.getItem("jeen_team_team") || "");
+  const [user, setUser] = useState(() => sessionStorage.getItem("jeen_team_user") || "");
+  const [role, setRole] = useState(() => sessionStorage.getItem("jeen_team_role") || "");
+  const [creds, setCreds] = useState({ username: "adjuster", password: "" });
+  const [loginErr, setLoginErr] = useState("");
+  const [claims, setClaims] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [acting, setActing] = useState("");
+
+  // Role-based access: Finance (Lee) is the admin and sees every team's queue
+  // with full actions; Adjuster and Legal each see only the work routed to them.
+  const isAdmin = role === "admin";
+  const ADMIN_ACTIONS = [
+    { action: "approve", label: "Approve", tone: "good" },
+    { action: "pay", label: "Pay", tone: "good" },
+    { action: "clear-fraud", label: "Clear fraud", tone: "good" },
+    { action: "appeal-uphold", label: "Uphold appeal", tone: "good" },
+    { action: "request-info", label: "Request info", tone: "warn" },
+    { action: "escalate", label: "Escalate", tone: "warn" },
+    { action: "decline", label: "Decline", tone: "bad" },
+  ];
+  const cfg = isAdmin
+    ? { actions: ADMIN_ACTIONS, desc: "Full access — every team's queue across the connected workflow. As admin you can take any action on any claim." }
+    : (TEAMS.find((t) => t.team === team) || { actions: [], desc: "" });
+
+  async function login(e) {
+    e.preventDefault(); setLoginErr(""); setBusy(true);
+    try {
+      const r = await fetch(TEAM_LOGIN_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(creds) });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || "Login failed");
+      sessionStorage.setItem("jeen_team_token", d.token);
+      sessionStorage.setItem("jeen_team_team", d.team);
+      sessionStorage.setItem("jeen_team_user", d.user);
+      sessionStorage.setItem("jeen_team_role", d.role || "");
+      setToken(d.token); setTeam(d.team); setUser(d.user); setRole(d.role || "");
+    } catch (e2) { setLoginErr(String(e2.message || e2)); } finally { setBusy(false); }
+  }
+  function logout() {
+    ["jeen_team_token", "jeen_team_team", "jeen_team_user", "jeen_team_role"].forEach((k) => sessionStorage.removeItem(k));
+    setToken(""); setTeam(""); setUser(""); setRole(""); setClaims(null);
+  }
+
+  async function load() {
+    if (!token) return; setBusy(true);
+    try {
+      // Admin sees every queue (fetch all teams and merge); a handler sees only their own.
+      const teams = isAdmin ? TEAMS.map((t) => t.team) : [team];
+      const results = await Promise.all(teams.map((tm) =>
+        fetch(`${TEAM_CLAIMS_URL}?token=${encodeURIComponent(token)}&team=${encodeURIComponent(tm)}`).then((r) => r.json()).catch(() => [])
+      ));
+      const seen = new Set();
+      const merged = results.flat().filter((c) => c && c.claim_ref && !seen.has(c.claim_ref) && seen.add(c.claim_ref));
+      merged.sort((a, b) => (a.claim_ref < b.claim_ref ? 1 : -1));
+      setClaims(merged);
+    } catch { setClaims([]); } finally { setBusy(false); }
+  }
+  useEffect(() => { if (token) load(); /* eslint-disable-next-line */ }, [token]);
+
+  async function act(claim_ref, action, label, claimTeam) {
+    setActing(claim_ref + action);
+    try {
+      await fetch(TEAM_ACTION_URL, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, claim_ref, action, team: claimTeam || team, actor: user, note: `${label} via Team Console` }),
+      });
+      await load();
+    } finally { setActing(""); }
+  }
+
+  /* ---- login screen: pick a team, then sign in ---- */
+  if (!token) {
+    return (
+      <section className="section">
+        <div className="wrap" style={{ maxWidth: 720 }}>
+          <Reveal>
+            <div className="eyebrow">Connected workflow · human teams</div>
+            <h2>Team Console</h2>
+            <p className="sublead">Ava routes every claim to the right team. Each team signs in here to action the work assigned to their queue — the claim then moves on to the next team automatically, and Ava keeps the claimant informed by email.</p>
+          </Reveal>
+          <Reveal delay={2} className="teamgrid">
+            {TEAMS.map((t) => (
+              <button key={t.team} className={`teamcard ${creds.username === t.login ? "sel" : ""}`} onClick={() => setCreds({ ...creds, username: t.login })}>
+                <div className="teamcard-h"><b>{t.team}</b><span className="tc-mail">{t.email}</span></div>
+                <p>{t.desc}</p>
+                <div className="tc-acts">{t.actions.map((a) => <span key={a.action} className={`tc-act tone-${a.tone}`}>{a.label}</span>)}</div>
+              </button>
+            ))}
+          </Reveal>
+          <Reveal delay={3} className="logincard" style={{ maxWidth: 460, margin: "26px auto 0" }}>
+            <div className="loginhead"><JeenLogo size={32} /><div><h2 style={{ fontSize: 22 }}>Sign in</h2><p className="dim2">Albion Mutual · team workspace</p></div></div>
+            <form onSubmit={login}>
+              <div className="lfield"><label>Team login</label><input value={creds.username} onChange={(e) => setCreds({ ...creds, username: e.target.value })} /></div>
+              <div className="lfield"><label>Password</label><input type="password" value={creds.password} onChange={(e) => setCreds({ ...creds, password: e.target.value })} placeholder="••••••••" /></div>
+              {loginErr && <div className="loginerr">{loginErr}</div>}
+              <button className="btn grad" style={{ width: "100%", justifyContent: "center", marginTop: 6 }} disabled={busy} type="submit">{busy ? "Signing in…" : "Sign in"}</button>
+            </form>
+            <div className="logindemo">Demo logins — <b>adjuster</b> · <b>legal</b> · <b>finance</b> (admin · full access), password <b>TeamAlbion2026!</b> · authenticated against the live <code>jeen.team_users</code> table. Each role only sees the work routed to it; admin sees every queue.</div>
+          </Reveal>
+        </div>
+      </section>
+    );
+  }
+
+  /* ---- team queue ---- */
+  return (
+    <section className="section">
+      <div className="wrap">
+        <div className="adminhead">
+          <div>
+            <div className="eyebrow">Team Console · {isAdmin ? "Admin · all queues" : team}</div>
+            <h2>{isAdmin ? "All claims" : `${team} queue`}{isAdmin && <span className="adminbadge">ADMIN</span>}</h2>
+            <p className="sublead">{cfg.desc}</p>
+          </div>
+          <div className="adminuser">
+            Signed in as <b>{user}</b>
+            <a className="btn ghost sm" href={`${N8N_BASE}/workflow/JeenClaimsChat1/executions`} target="_blank" rel="noreferrer" style={{ marginLeft: 12 }}>View in n8n ↗</a>
+            <button className="btn ghost sm" onClick={load} disabled={busy} style={{ marginLeft: 8 }}>↻ Refresh</button>
+            <button className="btn ghost sm" onClick={logout} style={{ marginLeft: 8 }}>Sign out</button>
+          </div>
+        </div>
+
+        <div className="tablewrap">
+          <table className="dtable">
+            <thead><tr><th>Claim ref</th><th>Claimant</th><th>Type</th><th>Value</th><th>Fraud</th>{isAdmin && <th>Team</th>}<th>Decision</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              {claims === null && <tr><td colSpan={isAdmin ? 9 : 8} className="tcenter dim2">Loading…</td></tr>}
+              {claims && claims.length === 0 && <tr><td colSpan={isAdmin ? 9 : 8} className="tcenter dim2">{isAdmin ? "No claims in any queue yet — run the agent on the Live Demo page." : `Nothing in this queue right now. When Ava routes a claim to ${team}, it appears here.`}</td></tr>}
+              {claims && claims.map((c) => (
+                <tr key={c.claim_ref}>
+                  <td><code>{c.claim_ref}</code><div className="tsub">{c.received}</div></td>
+                  <td>{c.claimant_name}<div className="tsub">{c.claimant_email}</div></td>
+                  <td>{c.claim_type}<div className="tsub">{c.incident_type} · {c.severity}</div></td>
+                  <td>£{Number(c.estimated_value || 0).toLocaleString()}{c.payment_ref && <div className="tsub">{c.payment_ref}</div>}</td>
+                  <td><span className="frpill" style={{ color: meterColor(c.fraud_risk) }}>{c.fraud_risk}</span></td>
+                  {isAdmin && <td><span className="tbadge route-adjuster">{c.team}</span></td>}
+                  <td><span className={`tbadge ${c.decision === "accept" ? "route-auto" : c.decision === "decline" ? "route-fraud" : "route-adjuster"}`}>{c.decision || "—"}</span></td>
+                  <td><span className={`spill s-${c.status}`}>{c.status}</span></td>
+                  <td>
+                    <div className="actbtns">
+                      {cfg.actions.map((a) => (
+                        <button key={a.action} className={`ab tone-${a.tone}`} disabled={!!acting} onClick={() => act(c.claim_ref, a.action, a.label, c.team)}>
+                          {acting === c.claim_ref + a.action ? "…" : a.label}
+                        </button>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="dim2 small" style={{ marginTop: 14 }}>
+          Each action writes the new status to PostgreSQL, appends to the <code>jeen.claim_events</code> audit trail, hands the claim to the next team, and triggers Ava to email the claimant. Approve a claim here and watch it leave this queue and appear in <b>Finance</b> — the claim navigating the connected workflow end to end.
+        </p>
+      </div>
+    </section>
+  );
+}
 
 /* ============================ PRESENTATION ============================ */
 const SLIDES = [

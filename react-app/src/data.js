@@ -28,6 +28,48 @@ export const USER_LOGIN_URL = `${N8N}/user-login`;
 export const USER_CLAIMS_URL = `${N8N}/user-claims`;
 export const CONVOS_ADMIN_URL = `${N8N}/conversations-admin`;
 
+// Team Console — per-team login, queue and actions (the connected multi-team workflow).
+export const TEAM_LOGIN_URL = `${N8N}/team-login`;
+export const TEAM_CLAIMS_URL = `${N8N}/team-claims`;
+export const TEAM_ACTION_URL = `${N8N}/team-action`;
+
+// n8n base — used to deep-link a team member straight to a claim's execution.
+export const N8N_BASE = "https://n8n.navada-edge-server.uk";
+
+// The three real teams Ava hands work to, and the actions each can take.
+// Each team has a real mailbox; Ava emails them when a claim lands in their queue.
+export const TEAMS = [
+  {
+    team: "Claims Adjuster", person: "Claims Adjuster", email: "send2chopstix@gmail.com",
+    login: "adjuster",
+    desc: "Reviews referred claims — high value (≥ £5k), high severity, or vulnerable customers — and approves or declines.",
+    actions: [
+      { action: "approve", label: "Approve → Finance", tone: "good" },
+      { action: "request-info", label: "Request more info", tone: "warn" },
+      { action: "decline", label: "Decline → Legal", tone: "bad" },
+    ],
+  },
+  {
+    team: "Legal", person: "Nisha Chopra", email: "Nishachopra.uk@gmail.com",
+    login: "legal",
+    desc: "Handles fraud-suspected claims, declines and customer appeals.",
+    actions: [
+      { action: "clear-fraud", label: "Clear → Adjuster", tone: "good" },
+      { action: "appeal-uphold", label: "Uphold appeal → Finance", tone: "good" },
+      { action: "decline", label: "Uphold decline", tone: "bad" },
+    ],
+  },
+  {
+    team: "Finance", person: "Lee Akpareva", email: "leeakpareva@gmail.com",
+    login: "finance",
+    desc: "Releases payment on approved claims (payment simulation) and confirms settlement.",
+    actions: [
+      { action: "pay", label: "Release payment", tone: "good" },
+      { action: "request-info", label: "Hold · request info", tone: "warn" },
+    ],
+  },
+];
+
 // Link to the live n8n workflow (the agent itself). Override via VITE_N8N_WORKFLOW_URL.
 export const N8N_WORKFLOW_URL =
   import.meta.env.VITE_N8N_WORKFLOW_URL ||

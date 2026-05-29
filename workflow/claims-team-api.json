@@ -1,0 +1,213 @@
+{
+  "id": "JeenTeamAPI1",
+  "name": "Albion Mutual — Team Console API (login · queue · action)",
+  "active": false,
+  "_comment": "Backend for the per-team console. Each insurance team (SIU, Adjuster, Payments, Vulnerable Customer, Complaints) logs in, sees ONLY the claims Ava routed to their queue, and acts on them. Every action writes the new status, appends to the jeen.claim_events audit trail, and triggers an Ava email so the claimant is kept informed as the claim moves between teams. This is how human teams 'plug into' the workflow without touching the n8n editor.",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "team-login", "responseMode": "responseNode", "options": { "allowedOrigins": "*" } },
+      "id": "g1000000-0000-0000-0000-000000000001",
+      "name": "POST /team-login",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-300, 0],
+      "webhookId": "team-login-albion"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT username, full_name, team, role FROM jeen.team_users WHERE username = '{{ $json.body.username }}' AND password_hash = md5('{{ $json.body.password }}') LIMIT 1;",
+        "options": {}
+      },
+      "id": "g1000000-0000-0000-0000-000000000002",
+      "name": "Team Auth",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [-60, 0],
+      "alwaysOutputData": true,
+      "credentials": { "postgres": { "id": "REPLACE_PG_CRED", "name": "NAVADA Postgres" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.full_name ? { ok:true, token:'REPLACE_TEAM_TOKEN', team:$json.team, user:$json.full_name, username:$json.username, role:$json.role } : { ok:false, error:'Invalid username or password' }) }}",
+        "options": { "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] } }
+      },
+      "id": "g1000000-0000-0000-0000-000000000003",
+      "name": "Team Login Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [200, 0]
+    },
+
+    {
+      "parameters": { "httpMethod": "GET", "path": "team-claims", "responseMode": "responseNode", "options": { "allowedOrigins": "*" } },
+      "id": "g1000000-0000-0000-0000-000000000004",
+      "name": "GET /team-claims",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-300, 240],
+      "webhookId": "team-claims-albion"
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": true, "typeValidation": "loose" }, "combinator": "and",
+          "conditions": [ { "id": "t1", "leftValue": "={{ $json.query.token }}", "rightValue": "REPLACE_TEAM_TOKEN", "operator": { "type": "string", "operation": "equals" } } ] },
+        "options": {}
+      },
+      "id": "g1000000-0000-0000-0000-000000000005",
+      "name": "Auth?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-60, 240]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT claim_ref, to_char(received_at,'YYYY-MM-DD HH24:MI') AS received, claimant_name, claimant_email, policy_number, incident_type, claim_type, severity, fraud_risk, fraud_reasons, vulnerable_flag, vulnerable_reason, estimated_value, decision, team, status, payout_amount, payment_ref, decline_reason, next_step, ai_summary FROM jeen.claims WHERE team = '{{ $json.query.team }}' ORDER BY id DESC LIMIT 200;",
+        "options": {}
+      },
+      "id": "g1000000-0000-0000-0000-000000000006",
+      "name": "Team Queue",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [200, 160],
+      "alwaysOutputData": true,
+      "credentials": { "postgres": { "id": "REPLACE_PG_CRED", "name": "NAVADA Postgres" } }
+    },
+    {
+      "parameters": { "respondWith": "allIncomingItems", "options": { "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] } } },
+      "id": "g1000000-0000-0000-0000-000000000007",
+      "name": "Queue Data",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [440, 160]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok:false, error:'Unauthorized' }) }}",
+        "options": { "responseCode": 401, "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] } }
+      },
+      "id": "g1000000-0000-0000-0000-000000000008",
+      "name": "Denied (queue)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [200, 360]
+    },
+
+    {
+      "parameters": { "httpMethod": "POST", "path": "team-action", "responseMode": "responseNode", "options": { "allowedOrigins": "*" } },
+      "id": "g1000000-0000-0000-0000-000000000009",
+      "name": "POST /team-action",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-300, 560],
+      "webhookId": "team-action-albion"
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": true, "typeValidation": "loose" }, "combinator": "and",
+          "conditions": [ { "id": "t2", "leftValue": "={{ $json.body.token }}", "rightValue": "REPLACE_TEAM_TOKEN", "operator": { "type": "string", "operation": "equals" } } ] },
+        "options": {}
+      },
+      "id": "g1000000-0000-0000-0000-000000000010",
+      "name": "Auth2?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-60, 560]
+    },
+    {
+      "parameters": { "jsCode": "// Map a team action to its effect: new status, which team it hands to next,\n// the audit verb, and the claimant-facing message Ava will email.\nconst b=$json.body||{};\nconst action=(b.action||'').toString().toLowerCase();\nconst esc=s=>String(s==null?'':s).replace(/'/g,\"''\");\nconst map={\n  approve:      {status:'approved', team:'Finance',             ev:'approved',       next:'Your claim has been approved by our claims team and passed to Payments for release.'},\n  pay:          {status:'paid',     team:'Finance',             ev:'paid',           next:'Your payment has been released and will reach your account within 1 working day.'},\n  decline:      {status:'declined', team:'Legal',  ev:'declined',       next:'After review, your claim has been declined. You can appeal within 14 days and our Complaints & Appeals team will review it.'},\n  'request-info':{status:'info-requested', team:null,             ev:'info-requested', next:'We need a little more information to continue with your claim. Please reply to this email with the details requested.'},\n  escalate:     {status:'referred', team:'Claims Adjuster',       ev:'escalated',      next:'Your claim has been escalated to a senior claims adjuster for review.'},\n  'clear-fraud':{status:'referred', team:'Claims Adjuster',       ev:'fraud-cleared',  next:'Our checks are complete and your claim is back in normal processing with our claims team.'},\n  'appeal-uphold':{status:'approved', team:'Finance',            ev:'appeal-upheld',  next:'Good news — your appeal was upheld and your claim approved. Payments will release it shortly.'}\n};\nconst m=map[action]||{status:'updated', team:null, ev:(action||'updated'), next:'Your claim has been updated by our team.'};\nconst sets=[\"status='\"+m.status+\"'\", \"next_step='\"+esc(m.next)+\"'\", \"updated_at=now()\"];\nif(m.team) sets.push(\"team='\"+esc(m.team)+\"'\");\nreturn [{json:{ claim_ref:esc(b.claim_ref), actor:esc(b.actor||'Team'), team_now:esc(b.team||''), ev:m.ev, note:esc(b.note||''), set_clause:sets.join(', '), new_status:m.status }}];" },
+      "id": "g1000000-0000-0000-0000-000000000011",
+      "name": "Resolve Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [200, 480]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE jeen.claims SET {{ $json.set_clause }} WHERE claim_ref = '{{ $json.claim_ref }}' RETURNING claim_ref, claimant_name, claimant_email, status, payment_ref, decision, team, next_step;",
+        "options": {}
+      },
+      "id": "g1000000-0000-0000-0000-000000000012",
+      "name": "Update Claim",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [440, 480],
+      "alwaysOutputData": true,
+      "credentials": { "postgres": { "id": "REPLACE_PG_CRED", "name": "NAVADA Postgres" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO jeen.claim_events(claim_ref, team, actor, action, note) VALUES('{{ $('Resolve Action').item.json.claim_ref }}', '{{ $('Resolve Action').item.json.team_now }}', '{{ $('Resolve Action').item.json.actor }}', '{{ $('Resolve Action').item.json.ev }}', '{{ $('Resolve Action').item.json.note }}');",
+        "options": {}
+      },
+      "id": "g1000000-0000-0000-0000-000000000013",
+      "name": "Log Event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [680, 480],
+      "alwaysOutputData": true,
+      "credentials": { "postgres": { "id": "REPLACE_PG_CRED", "name": "NAVADA Postgres" } }
+    },
+    {
+      "parameters": {
+        "fromEmail": "claude.navada@zohomail.eu",
+        "toEmail": "={{ $('Update Claim').item.json.claimant_email }}",
+        "subject": "=Update on your Albion Mutual claim {{ $('Update Claim').item.json.claim_ref }}",
+        "emailFormat": "html",
+        "html": "=<table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='margin:0;padding:0;background:#f4eef8'><tr><td align='center' style='padding:12px 8px'><table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='max-width:560px;font-family:Arial,Helvetica,sans-serif;color:#1a1722'><tr><td style='padding:0'><div style='height:6px;background:#c55a4e;border-radius:6px 6px 0 0'></div><div style='background:#ffffff;border:1px solid #ece5f1;border-top:0;padding:22px 18px'><table cellpadding='0' cellspacing='0'><tr><td style='width:16px;height:26px;background:#d6a6e5;border-radius:4px'></td><td style='width:5px'></td><td style='width:16px;height:18px;background:#c55a4e;border-radius:4px'></td><td style='width:5px'></td><td style='width:14px;height:14px;background:#e3a954;border-radius:4px'></td><td style='padding-left:10px;font-weight:bold;font-size:17px'>Albion Mutual <span style='color:#938c9e;font-weight:normal;font-size:12px'>&middot; powered by Jeen.ai</span></td></tr></table><p style='font-size:15px;margin-top:18px'>Dear {{ $('Update Claim').item.json.claimant_name }},</p><p style='font-size:15px;line-height:1.6'>There is an update on your claim.</p><div style='background:#f7f6fa;border-radius:12px;padding:16px 18px;margin:16px 0'><div style='font-size:12px;color:#574f60;text-transform:uppercase;letter-spacing:.05em'>Claim reference</div><div style='font-size:20px;font-weight:bold;color:#9a5fc0;font-family:monospace;word-break:break-all'>{{ $('Update Claim').item.json.claim_ref }}</div><div style='margin-top:10px;font-size:13px;color:#574f60'>Status: <b style='color:#1a1722'>{{ $('Update Claim').item.json.status }}</b>{{ $('Update Claim').item.json.payment_ref ? ' &middot; Payment ref: ' + $('Update Claim').item.json.payment_ref : '' }}</div></div><p style='font-size:15px;line-height:1.6'>{{ $('Update Claim').item.json.next_step }}</p><p style='font-size:15px;margin-top:22px'>Warm regards,<br><b>Ava</b><br><span style='color:#938c9e;font-size:13px'>AI Claims Assistant &middot; Albion Mutual, powered by Jeen.ai</span></p></div><p style='text-align:center;color:#938c9e;font-size:11px;margin-top:12px'>Automated message from Ava. Albion Mutual is authorised and regulated by the FCA.</p></td></tr></table></td></tr></table>",
+        "options": {}
+      },
+      "id": "g1000000-0000-0000-0000-000000000014",
+      "name": "Email Claimant (update)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [920, 480],
+      "onError": "continueRegularOutput",
+      "credentials": { "smtp": { "id": "REPLACE_SMTP_CRED", "name": "NAVADA Zoho SMTP" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok:true, claim_ref: $('Update Claim').item.json.claim_ref, status: $('Update Claim').item.json.status, team: $('Update Claim').item.json.team, payment_ref: $('Update Claim').item.json.payment_ref || null }) }}",
+        "options": { "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] } }
+      },
+      "id": "g1000000-0000-0000-0000-000000000015",
+      "name": "Action Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1160, 480]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok:false, error:'Unauthorized' }) }}",
+        "options": { "responseCode": 401, "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] } }
+      },
+      "id": "g1000000-0000-0000-0000-000000000016",
+      "name": "Denied (action)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [200, 700]
+    }
+  ],
+  "connections": {
+    "POST /team-login": { "main": [[{ "node": "Team Auth", "type": "main", "index": 0 }]] },
+    "Team Auth": { "main": [[{ "node": "Team Login Result", "type": "main", "index": 0 }]] },
+    "GET /team-claims": { "main": [[{ "node": "Auth?", "type": "main", "index": 0 }]] },
+    "Auth?": { "main": [[{ "node": "Team Queue", "type": "main", "index": 0 }], [{ "node": "Denied (queue)", "type": "main", "index": 0 }]] },
+    "Team Queue": { "main": [[{ "node": "Queue Data", "type": "main", "index": 0 }]] },
+    "POST /team-action": { "main": [[{ "node": "Auth2?", "type": "main", "index": 0 }]] },
+    "Auth2?": { "main": [[{ "node": "Resolve Action", "type": "main", "index": 0 }], [{ "node": "Denied (action)", "type": "main", "index": 0 }]] },
+    "Resolve Action": { "main": [[{ "node": "Update Claim", "type": "main", "index": 0 }]] },
+    "Update Claim": { "main": [[{ "node": "Log Event", "type": "main", "index": 0 }]] },
+    "Log Event": { "main": [[{ "node": "Email Claimant (update)", "type": "main", "index": 0 }]] },
+    "Email Claimant (update)": { "main": [[{ "node": "Action Result", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
