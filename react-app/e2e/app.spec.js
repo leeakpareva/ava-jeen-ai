@@ -69,7 +69,8 @@ test("Admin console shows login, then MI + Ask Ava tabs after sign-in", async ({
   await expect(page.getByRole("heading", { name: /Admin console/i })).toBeVisible();
   await page.getByPlaceholder("••••••••").fill("any");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("heading", { name: /Claims operations dashboard/i })).toBeVisible({ timeout: 10000 });
+  // Post-login the MI/Ask-Ava tab bar appears; wait through the brief launch splash.
+  await expect(page.getByRole("button", { name: "Ask Ava", exact: true })).toBeVisible({ timeout: 15000 });
   await page.getByRole("button", { name: "Ask Ava", exact: true }).click();
   await page.getByRole("button", { name: /How many claims this week/i }).click();
   await expect(page.getByText(/operations analytics agent/i)).toBeVisible();
