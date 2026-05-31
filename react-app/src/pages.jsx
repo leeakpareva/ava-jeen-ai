@@ -290,6 +290,29 @@ function FormConsole() {
 /* ---- Ava: conversational intake agent ---- */
 const GREETING = { role: "assistant", content: "Hi, I'm Ava — Albion Mutual's claims assistant. Tell me what happened and I'll take it from there." };
 
+// Resilient POST to Ava: the agent is real (LLM + tools + RAG) so a call normally
+// takes ~5s and can occasionally spike. We give it a generous timeout (AbortController)
+// and one automatic retry, so a single slow call or transient tunnel blip doesn't
+// surface as a hard "can't reach the system" error to the customer.
+async function postChat(body, { timeout = 60000, retries = 1 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeout);
+    try {
+      const r = await fetch(CHAT_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ctrl.signal });
+      clearTimeout(t);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.json();
+    } catch (e) {
+      clearTimeout(t);
+      lastErr = e;
+      if (attempt < retries) await new Promise((res) => setTimeout(res, 1200)); // brief backoff before retry
+    }
+  }
+  throw lastErr;
+}
+
 function ChatAgent({ user }) {
   // A STABLE per-user session key makes Ava's Postgres-backed memory persist across
   // logins: the n8n memory node keys on this session_id, so a returning, authenticated
@@ -326,8 +349,7 @@ function ChatAgent({ user }) {
       } catch (e) { /* non-fatal — Ava still greets */ }
       const prime = `[SYSTEM CONTEXT — do not quote this verbatim. The signed-in customer ${first} has just opened the chat. Claims on file: ${claimSummary}. Greet them warmly by first name, briefly recap what you discussed last time if you remember it from your memory, then give a one-line status update for each claim on file. If there are none, invite them to tell you what happened. Keep it concise and friendly.]`;
       try {
-        const r = await fetch(CHAT_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sid.current, messages: [{ role: "user", content: prime }] }) });
-        const d = await r.json();
+        const d = await postChat({ session_id: sid.current, messages: [{ role: "user", content: prime }] });
         setMessages([{ role: "assistant", content: d.reply || `Welcome back, ${first}. How can I help with your claim today?` }]);
       } catch (e) {
         setMessages([{ role: "assistant", content: `Welcome back, ${first}. How can I help with your claim today?` }]);
@@ -341,13 +363,12 @@ function ChatAgent({ user }) {
     const next = [...messages, { role: "user", content, display }];
     setMessages(next); setBusy(true);
     try {
-      const r = await fetch(CHAT_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sid.current, messages: next.map(({ role, content }) => ({ role, content })).filter((m) => m !== GREETING || next.indexOf(m) > 0) }) });
-      const d = await r.json();
+      const d = await postChat({ session_id: sid.current, messages: next.map(({ role, content }) => ({ role, content })).filter((m) => m !== GREETING || next.indexOf(m) > 0) });
       const reply = d.reply || "Sorry, I didn't catch that — could you rephrase?";
       setMessages((m) => [...m, { role: "assistant", content: reply }]);
       if (d.ready && d.claim_ref) setDecision(d);
     } catch (e) {
-      setMessages((m) => [...m, { role: "assistant", content: "I'm having trouble reaching the claims system right now. Please try again in a moment." }]);
+      setMessages((m) => [...m, { role: "assistant", content: "Ava is taking longer than usual to respond — this is usually a brief hiccup. Please send your message again in a moment." }]);
     } finally { setBusy(false); }
   }
   function send(text) {
