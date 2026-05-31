@@ -135,11 +135,14 @@ export const WORKFLOW_STEPS = [
     why: "Closes the loop with the customer immediately and connects the teams — faster first response, fewer SLA breaches, nothing lost between hand-offs." },
 ];
 
+// Home-page proof strip. Each stat either counts up when it scrolls into view
+// (`to`, with optional `prefix`/`suffix`) or shows a fixed text badge (`text`).
+// Rendered by <StatStrip/> in pages.jsx — see that component for the animation.
 export const STATS = [
-  { n: "3", l: "outcomes on every claim — accept, refer or decline" },
-  { n: "3", l: "specialist teams connected in one workflow" },
-  { n: "FCA", l: "Consumer-Duty vulnerability flag on every claim" },
-  { n: "100%", l: "of claims & team actions written to an audit trail" },
+  { to: 60, prefix: "<", suffix: "s", l: "from first notice of loss to a governed, triaged decision" },
+  { to: 3, l: "specialist teams connected in one workflow — Adjuster · Legal · Finance" },
+  { text: "FCA", l: "Consumer-Duty vulnerability check on every single claim" },
+  { to: 100, suffix: "%", l: "of claims & team actions captured in an immutable audit trail" },
 ];
 
 export const FORM_URL = "https://n8n.navada-edge-server.uk/form/albion-claim-fnol";
