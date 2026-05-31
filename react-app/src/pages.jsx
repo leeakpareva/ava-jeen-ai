@@ -447,10 +447,15 @@ export function ClaimIntake({ user }) {
   );
 }
 
-/* ---- Demo: the live intake — Clerk-gated so Ava is a secure, per-user agent ----
- * Signed-out visitors get a sign-in wall; signed-in customers get Ava with their
- * Clerk user id as the stable memory key, so she recalls their history and claims. */
-function DemoBody({ user }) {
+/* ---- Demo: the live intake — gated so Ava is a secure, per-user agent ----
+ * Every visitor signs in before reaching Ava. The signed-in user's id becomes
+ * Ava's stable memory key, so she recalls their conversation history and claims.
+ * Two sign-in backends, same downstream code:
+ *   • Clerk (full auth) when a Clerk key is configured.
+ *   • Email sign-in (no external service) otherwise — keyed on the email, so a
+ *     returning customer with the same email gets their whole history back.
+ * Both produce a `user` shaped { id, firstName, fullName, primaryEmailAddress }. */
+function DemoBody({ user, onSignOut }) {
   return (
     <section className="section">
       <div className="wrap">
@@ -458,7 +463,14 @@ function DemoBody({ user }) {
           <div className="eyebrow">Live demo</div>
           <h2>Report a claim to Ava.</h2>
           <p className="sublead">Chat with Ava or use the form — she triages, decides and registers it live.{user ? " You're signed in, so Ava remembers your previous conversations and can see your claim history." : ""}</p>
-          {user && <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}><UserButton afterSignOutUrl="/#/demo" /></div>}
+          {user && (
+            <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginTop: 8 }}>
+              <span className="dim2 small">Signed in as <b>{user.primaryEmailAddress?.emailAddress}</b></span>
+              {onSignOut
+                ? <button className="btn ghost sm" onClick={onSignOut}>Switch user</button>
+                : <UserButton afterSignOutUrl="/#/demo" />}
+            </div>
+          )}
         </Reveal>
         <ClaimIntake user={user} />
       </div>
@@ -487,7 +499,51 @@ function ClerkDemo() {
   );
 }
 
-export function Demo() { return CLERK_KEY ? <ClerkDemo /> : <DemoBody user={null} />; }
+/* Email sign-in (no external auth): identifies the customer by email so Ava's
+ * Postgres-backed memory persists across visits. The email is the stable key. */
+function EmailDemo() {
+  const [acct, setAcct] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("ava_user") || "null"); } catch (e) { return null; }
+  });
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+
+  function signIn(e) {
+    e.preventDefault();
+    const em = email.trim().toLowerCase();
+    const nm = name.trim();
+    if (!em) return;
+    // Shaped exactly like a Clerk user so the chat/recall code is identical.
+    const u = { id: em, firstName: (nm.split(" ")[0] || "there"), fullName: nm, primaryEmailAddress: { emailAddress: em } };
+    localStorage.setItem("ava_user", JSON.stringify(u));
+    setAcct(u);
+  }
+  function signOut() { localStorage.removeItem("ava_user"); setAcct(null); setName(""); setEmail(""); }
+
+  if (acct) return <DemoBody user={acct} onSignOut={signOut} />;
+
+  return (
+    <section className="section"><div className="wrap">
+      <div style={{ maxWidth: 460, margin: "0 auto" }}>
+        <Reveal className="shead">
+          <div className="eyebrow" style={{ textAlign: "center" }}>Secure access</div>
+          <h2 style={{ textAlign: "center" }}>Sign in to talk to Ava</h2>
+          <p className="sublead" style={{ textAlign: "center" }}>Ava is your personal claims assistant. Sign in with your email and she'll remember your previous conversations and your claim history — every chat picks up where you left off.</p>
+        </Reveal>
+        <Reveal className="logincard">
+          <form onSubmit={signIn}>
+            <div className="lfield"><label>Your name</label><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Smith" /></div>
+            <div className="lfield"><label>Your email</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@example.com" required /></div>
+            <button className="btn grad" style={{ width: "100%", justifyContent: "center" }} type="submit">Talk to Ava →</button>
+          </form>
+          <div className="logindemo">Returning? Use the same email and Ava will remember you. Try <b>demo@example.com</b> to see claims on file.</div>
+        </Reveal>
+      </div>
+    </div></section>
+  );
+}
+
+export function Demo() { return CLERK_KEY ? <ClerkDemo /> : <EmailDemo />; }
 
 function ResultCard({ d }) {
   const mc = meterColor(d.fraud_risk);
