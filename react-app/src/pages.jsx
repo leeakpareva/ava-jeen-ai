@@ -261,14 +261,50 @@ function FormConsole() {
 /* ---- Ava: conversational intake agent ---- */
 const GREETING = { role: "assistant", content: "Hi, I'm Ava — Albion Mutual's claims assistant. Tell me what happened and I'll take it from there." };
 
-function ChatAgent() {
-  const [messages, setMessages] = useState([GREETING]);
+function ChatAgent({ user }) {
+  // A STABLE per-user session key makes Ava's Postgres-backed memory persist across
+  // logins: the n8n memory node keys on this session_id, so a returning, authenticated
+  // customer gets their whole conversation history back. Anonymous fallback (no Clerk)
+  // uses a random per-visit key, exactly as before.
+  const [messages, setMessages] = useState(user ? [] : [GREETING]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [decision, setDecision] = useState(null);
   const scroller = useRef(null);
-  const sid = useRef("sess-" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36));
+  const sid = useRef(user ? "user-" + user.id : "sess-" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36));
+  const greeted = useRef(false);
   useEffect(() => { scroller.current?.scrollTo({ top: 9e9, behavior: "smooth" }); }, [messages, busy]);
+
+  // Welcome-back: once signed in, fetch the customer's claims and ask Ava to greet them
+  // by name, recap the last conversation (from her own memory) and summarise claim status.
+  // Runs once per mount; for a brand-new customer there's simply nothing to recall.
+  useEffect(() => {
+    if (!user || greeted.current) return;
+    greeted.current = true;
+    (async () => {
+      setBusy(true);
+      const first = user.firstName || (user.fullName || "there").split(" ")[0];
+      let claimSummary = "no claims on file yet";
+      try {
+        const email = user.primaryEmailAddress?.emailAddress;
+        if (email) {
+          const cr = await fetch(`${USER_CLAIMS_URL}?email=${encodeURIComponent(email)}`);
+          const cd = await cr.json();
+          if (Array.isArray(cd) && cd.length) {
+            claimSummary = cd.map((c) => `${c.claim_ref} — ${c.claim_type || c.incident_type}, £${Number(c.estimated_value || 0).toLocaleString()}, status: ${c.status}`).join("; ");
+          }
+        }
+      } catch (e) { /* non-fatal — Ava still greets */ }
+      const prime = `[SYSTEM CONTEXT — do not quote this verbatim. The signed-in customer ${first} has just opened the chat. Claims on file: ${claimSummary}. Greet them warmly by first name, briefly recap what you discussed last time if you remember it from your memory, then give a one-line status update for each claim on file. If there are none, invite them to tell you what happened. Keep it concise and friendly.]`;
+      try {
+        const r = await fetch(CHAT_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sid.current, messages: [{ role: "user", content: prime }] }) });
+        const d = await r.json();
+        setMessages([{ role: "assistant", content: d.reply || `Welcome back, ${first}. How can I help with your claim today?` }]);
+      } catch (e) {
+        setMessages([{ role: "assistant", content: `Welcome back, ${first}. How can I help with your claim today?` }]);
+      } finally { setBusy(false); }
+    })();
+  }, [user]);
 
   // Post a message to Ava and append her reply. `display` lets the bubble show
   // something friendlier than the raw content sent to the agent (used for attachments).
@@ -354,7 +390,7 @@ function ChatAgent() {
 }
 
 /* ---- Reusable claim intake (Ava chat + structured form tabs) ---- */
-export function ClaimIntake() {
+export function ClaimIntake({ user }) {
   const [tab, setTab] = useState("ava");
   return (
     <Reveal>
@@ -362,26 +398,52 @@ export function ClaimIntake() {
         <button className={`tab ${tab === "ava" ? "on" : ""}`} onClick={() => setTab("ava")}>Talk to Ava</button>
         <button className={`tab ${tab === "form" ? "on" : ""}`} onClick={() => setTab("form")}>Structured form</button>
       </div>
-      {tab === "ava" ? <ChatAgent /> : <FormConsole />}
+      {tab === "ava" ? <ChatAgent user={user} /> : <FormConsole />}
     </Reveal>
   );
 }
 
-/* ---- Demo: the live intake ---- */
-export function Demo() {
+/* ---- Demo: the live intake — Clerk-gated so Ava is a secure, per-user agent ----
+ * Signed-out visitors get a sign-in wall; signed-in customers get Ava with their
+ * Clerk user id as the stable memory key, so she recalls their history and claims. */
+function DemoBody({ user }) {
   return (
     <section className="section">
       <div className="wrap">
         <Reveal className="shead">
           <div className="eyebrow">Live demo</div>
           <h2>Report a claim to Ava.</h2>
-          <p className="sublead">Chat with Ava or use the form — she triages, decides and registers it live.</p>
+          <p className="sublead">Chat with Ava or use the form — she triages, decides and registers it live.{user ? " You're signed in, so Ava remembers your previous conversations and can see your claim history." : ""}</p>
+          {user && <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}><UserButton afterSignOutUrl="/#/demo" /></div>}
         </Reveal>
-        <ClaimIntake />
+        <ClaimIntake user={user} />
       </div>
     </section>
   );
 }
+
+function ClerkDemo() {
+  const { user } = useUser();
+  return (
+    <>
+      <SignedOut>
+        <section className="section"><div className="wrap">
+          <div style={{ maxWidth: 460, margin: "0 auto" }}>
+            <Reveal className="shead">
+              <div className="eyebrow" style={{ textAlign: "center" }}>Secure access</div>
+              <h2 style={{ textAlign: "center" }}>Sign in to talk to Ava</h2>
+              <p className="sublead" style={{ textAlign: "center" }}>Ava is your personal claims assistant. Signing in lets her securely recall your previous conversations and your claim history — so every chat picks up exactly where you left off.</p>
+            </Reveal>
+            <div style={{ display: "flex", justifyContent: "center" }}><SignIn routing="hash" /></div>
+          </div>
+        </div></section>
+      </SignedOut>
+      <SignedIn><DemoBody user={user} /></SignedIn>
+    </>
+  );
+}
+
+export function Demo() { return CLERK_KEY ? <ClerkDemo /> : <DemoBody user={null} />; }
 
 function ResultCard({ d }) {
   const mc = meterColor(d.fraud_risk);
