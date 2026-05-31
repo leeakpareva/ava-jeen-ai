@@ -13,6 +13,10 @@ scripts/creds.import.json
 scripts/pgvec.creds.json
 scripts/kb_seed.sql
 
+# test artifacts
+react-app/test-results/
+react-app/playwright-report/
+
 # os / logs
 .DS_Store
 Thumbs.db

@@ -34,22 +34,7 @@ import {
   USER_LOGIN_URL, USER_CLAIMS_URL, CONVOS_ADMIN_URL, N8N_WORKFLOW_URL, LIFECYCLE_STAGES,
   TEAM_LOGIN_URL, TEAM_CLAIMS_URL, TEAM_ACTION_URL, TEAMS, N8N_BASE, DB_UI_URL, GRAFANA_URL,
 } from "./data.js";
-
-const routeClass = (r) => (r === "auto-settle" || r === "auto-pay" ? "route-auto" : r === "SIU-fraud" ? "route-fraud" : "route-adjuster");
-const meterColor = (v) => (v >= 60 ? "#c55a4e" : v >= 30 ? "#e3a954" : "#1c9d83");
-
-// SLA: referred claims (awaiting a human team) must be actioned within SLA_HOURS of receipt.
-const SLA_HOURS = 24;
-function slaInfo(c) {
-  if (c.status !== "referred") return { label: "—", cls: "sla-na" };
-  const received = new Date((c.received || "").replace(" ", "T"));
-  if (isNaN(received)) return { label: "open", cls: "sla-ok" };
-  const ageH = (Date.now() - received.getTime()) / 3.6e6;
-  const left = SLA_HOURS - ageH;
-  if (left <= 0) return { label: `overdue ${Math.floor(-left)}h`, cls: "sla-over" };
-  if (left <= 4) return { label: `due in ${Math.ceil(left)}h`, cls: "sla-warn" };
-  return { label: `due in ${Math.ceil(left)}h`, cls: "sla-ok" };
-}
+import { routeClass, meterColor, SLA_HOURS, slaInfo, stageIndex, adminMetrics, localAnswer } from "./logic.js";
 
 /* Full-width hero banner — rotating London / insurance images behind the headline. */
 function HeroBanner() {
@@ -972,56 +957,6 @@ function AdminCharts({ claims }) {
  * WHY:  shows the second half of the Jeen story — AI for the operator, not just
  *       AI for triage — while keeping the same governance (tools compute, the
  *       model explains, it cannot query or act on customer data itself). */
-function adminMetrics(claims) {
-  const all = claims || [];
-  const num = (x) => Number(x || 0);
-  const parse = (c) => { const d = new Date(String(c.received || "").replace(" ", "T")); return isNaN(d) ? null : d; };
-  const now = new Date();
-  const since = (days) => { const t = now.getTime() - days * 864e5; return all.filter((c) => { const d = parse(c); return d && d.getTime() >= t; }); };
-  const decisionOf = (c) => c.decision || (["paid", "approved"].includes(c.status) ? "accept" : c.status === "declined" ? "decline" : c.status === "referred" ? "refer" : "other");
-  const n = all.length;
-  const week = since(7), month = since(30);
-  const by = (arr, f) => arr.filter(f).length;
-  const sumVal = (arr) => arr.reduce((a, c) => a + num(c.estimated_value), 0);
-  const types = ["Motor", "Home", "Travel", "Liability"];
-  return {
-    generated_at: now.toISOString().slice(0, 10),
-    total_claims: n,
-    claims_last_7_days: week.length,
-    claims_last_30_days: month.length,
-    decisions: {
-      accepted: by(all, (c) => decisionOf(c) === "accept"),
-      referred: by(all, (c) => decisionOf(c) === "refer"),
-      declined: by(all, (c) => decisionOf(c) === "decline"),
-    },
-    in_review: by(all, (c) => c.status === "referred"),
-    paid: by(all, (c) => c.status === "paid"),
-    vulnerable_customers: by(all, (c) => c.vulnerable_flag),
-    fraud: {
-      high_risk_ge_60: by(all, (c) => num(c.fraud_risk) >= 60),
-      medium_30_59: by(all, (c) => num(c.fraud_risk) >= 30 && num(c.fraud_risk) < 60),
-      low_lt_30: by(all, (c) => num(c.fraud_risk) < 30),
-      average_score: n ? Math.round(all.reduce((a, c) => a + num(c.fraud_risk), 0) / n) : 0,
-    },
-    by_type: types.reduce((o, t) => { o[t] = by(all, (c) => (c.claim_type || c.incident_type || "").toLowerCase().includes(t.toLowerCase())); return o; }, {}),
-    value: {
-      total_claimed_gbp: Math.round(sumVal(all)),
-      paid_out_gbp: Math.round(sumVal(all.filter((c) => c.status === "paid"))),
-      average_claim_gbp: n ? Math.round(sumVal(all) / n) : 0,
-    },
-  };
-}
-
-// Plain-text fallback if the live agent declines (keeps the demo moving).
-function localAnswer(m) {
-  return `Here's the current picture across Albion Mutual (as of ${m.generated_at}):
-• ${m.total_claims} claims in total — ${m.claims_last_7_days} in the last 7 days, ${m.claims_last_30_days} in the last 30.
-• Decisions: ${m.decisions.accepted} accepted, ${m.decisions.referred} referred, ${m.decisions.declined} declined (${m.in_review} currently in review).
-• Fraud: ${m.fraud.high_risk_ge_60} high-risk (≥60), average score ${m.fraud.average_score}/100.
-• ${m.vulnerable_customers} vulnerable customers flagged for extra care.
-• Value: £${m.value.total_claimed_gbp.toLocaleString()} claimed, £${m.value.paid_out_gbp.toLocaleString()} paid out.`;
-}
-
 const ADMIN_AVA_GREETING = { role: "assistant", content: "I'm Ava — your operations assistant. Ask me anything about Albion Mutual's claims: volumes, fraud, vulnerable customers, payouts, trends. For example: \"How many claims did we have this week?\"" };
 const ADMIN_AVA_CHIPS = ["How many claims this week?", "What's our fraud rate?", "How many vulnerable customers?", "How much have we paid out?", "Which claim type is most common?"];
 
@@ -1297,11 +1232,6 @@ function ClaimDrawer({ claim: c, convo, onClose, onDecide, acting }) {
 }
 
 /* ============================ CUSTOMER PORTAL (Clerk) ============================ */
-function stageIndex(status) {
-  if (["paid", "approved", "rejected", "declined", "auto-settled"].includes(status)) return 4;
-  if (status === "referred" || status === "info-requested" || status === "pending-human-review") return 2; // submitted + triaged done, decision pending
-  return 2;
-}
 function ClaimLifecycle({ status }) {
   const done = stageIndex(status);
   const rejected = status === "rejected";
@@ -1555,7 +1485,7 @@ export function TeamConsole() {
               {loginErr && <div className="loginerr">{loginErr}</div>}
               <button className="btn grad" style={{ width: "100%", justifyContent: "center", marginTop: 6 }} disabled={busy} type="submit">{busy ? "Signing in…" : "Sign in"}</button>
             </form>
-            <div className="logindemo">Demo logins — <b>adjuster</b> · <b>legal</b> · <b>finance</b> (admin · full access), password <b>TeamAlbion2026!</b> · authenticated against the live <code>jeen.team_users</code> table. Each role only sees the work routed to it; admin sees every queue.</div>
+            <div className="logindemo">Demo logins — <b>adjuster</b>, <b>legal</b> or <b>finance</b> (sign in as <b>finance</b> for full/admin access — there is no separate "admin" login). Password <b>TeamAlbion2026!</b> · authenticated against the live <code>jeen.team_users</code> table. Each role sees only the work routed to it; finance sees every queue.</div>
           </Reveal>
         </div>
       </section>
@@ -1655,10 +1585,14 @@ export function ObservabilityPage() {
           <span className="dim2 small">Grafana · grafana.navada-edge-server.uk/d/ava-n8n-obs</span>
           <a href={GRAFANA_URL} target="_blank" rel="noreferrer" className="btn grad sm" onClick={() => window.dispatchEvent(new Event("ava-launch"))}>Open the live dashboard ↗</a>
         </Reveal>
+        {/* Grafana requires auth, so an embedded iframe renders blank. Show a real
+            dashboard screenshot instead, with the live link above for the real thing. */}
         <Reveal className="dbframe">
-          <iframe src={`${GRAFANA_URL}?kiosk&theme=light&refresh=30s`} title="Ava / n8n observability (Grafana)" loading="lazy" />
+          <a href={GRAFANA_URL} target="_blank" rel="noreferrer" onClick={() => window.dispatchEvent(new Event("ava-launch"))}>
+            <img src="/shots/grafana-hero.png" alt="Ava / n8n observability dashboard in Grafana — workflow execution duration, CPU & memory, event-loop lag, HTTP throughput and cache hit rate." style={{ width: "100%", display: "block" }} />
+          </a>
         </Reveal>
-        <p className="dim2 small" style={{ marginTop: 10 }}>If the panel is blank it's the access gate — use <b>Open the live dashboard</b>. Metrics: <code>n8n_workflow_execution_duration_seconds</code>, <code>n8n_process_*</code>, <code>n8n_nodejs_eventloop_lag_*</code>, <code>n8n_http_request_duration_seconds</code>, <code>n8n_cache_*</code>.</p>
+        <p className="dim2 small" style={{ marginTop: 10 }}>Live Grafana dashboard (snapshot shown; click <b>Open the live dashboard</b> for the real-time view, which requires sign-in). Metrics: <code>n8n_workflow_execution_duration_seconds</code>, <code>n8n_process_*</code>, <code>n8n_nodejs_eventloop_lag_*</code>, <code>n8n_http_request_duration_seconds</code>, <code>n8n_cache_*</code>.</p>
       </div>
     </section>
   );
