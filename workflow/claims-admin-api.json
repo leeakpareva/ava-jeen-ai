@@ -63,7 +63,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT claim_ref, to_char(received_at,'YYYY-MM-DD HH24:MI') AS received, claimant_name, claimant_email, policy_number, incident_type, incident_date::text AS incident_date, description, claim_type, severity, fraud_risk, fraud_reasons, vulnerable_flag, vulnerable_reason, routing, status, adjuster_decision, adjuster_notes, estimated_value, ai_summary, next_step FROM jeen.claims ORDER BY id DESC LIMIT 200;",
+        "query": "SELECT claim_ref, to_char(received_at,'YYYY-MM-DD HH24:MI') AS received, claimant_name, claimant_email, policy_number, incident_type, incident_date::text AS incident_date, description, claim_type, severity, fraud_risk, fraud_reasons, vulnerable_flag, vulnerable_reason, routing, decision, team, payout_amount, payment_ref, decline_reason, status, adjuster_decision, adjuster_notes, estimated_value, ai_summary, next_step FROM jeen.claims ORDER BY id DESC LIMIT 200;",
         "options": {}
       },
       "id": "e1000000-0000-0000-0000-000000000006",

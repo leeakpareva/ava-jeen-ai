@@ -1,0 +1,81 @@
+{
+  "id": "JeenAttachAPI1",
+  "name": "Albion Mutual — Attachment Vision API (photos & documents)",
+  "active": false,
+  "_comment": "Lets claimants attach photos/documents in the Ava chat. The image is sent to OpenAI vision (gpt-4o-mini), which extracts the claim-relevant content (damage, visible text, amounts, dates, reg plates). The extracted summary is stored in jeen.attachments and returned to the web app, which feeds it into Ava's conversation so her triage takes the evidence into account. This is how real claims use photos and documents.",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "attach-analyze", "responseMode": "responseNode", "options": { "allowedOrigins": "*", "rawBody": false } },
+      "id": "h1000000-0000-0000-0000-000000000001",
+      "name": "POST /attach-analyze",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-320, 300],
+      "webhookId": "attach-analyze-albion"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: 'gpt-4o-mini', max_tokens: 320, messages: [ { role: 'user', content: [ { type: 'text', text: 'You are an insurance claims assistant. Look at this attached photo or document and describe, concisely and factually, only what is relevant to an insurance claim: the type of damage or the item, plus any visible text, amounts, dates, registration plates or reference numbers. If it does not look claim-related, say so in one line.' }, { type: 'image_url', image_url: { url: $json.body.image_base64 } } ] } ] } }}",
+        "options": {}
+      },
+      "id": "h1000000-0000-0000-0000-000000000002",
+      "name": "OpenAI Vision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-80, 300],
+      "onError": "continueRegularOutput",
+      "credentials": { "openAiApi": { "id": "REPLACE_OPENAI_CRED", "name": "OpenAI (NAVADA)" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const wh = ($('POST /attach-analyze').first().json.body) || {};\nconst resp = $json || {};\nlet summary = '';\ntry { summary = (resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || ''; } catch (e) {}\nif (!summary) summary = 'Attachment received, but it could not be analysed automatically.';\nconst esc = (s) => String(s == null ? '' : s).replace(/'/g, \"''\");\nreturn [{ json: { session_id: esc(wh.session_id || 'anon'), filename: esc(wh.filename || 'file'), mime: esc(wh.mime || ''), summary: esc(summary), summary_raw: summary } }];"
+      },
+      "id": "h1000000-0000-0000-0000-000000000003",
+      "name": "Extract Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [160, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO jeen.attachments(session_id, filename, mime, summary) VALUES('{{ $json.session_id }}', '{{ $json.filename }}', '{{ $json.mime }}', '{{ $json.summary }}');",
+        "options": {}
+      },
+      "id": "h1000000-0000-0000-0000-000000000004",
+      "name": "Store Attachment",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [400, 300],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "credentials": { "postgres": { "id": "REPLACE_PG_CRED", "name": "NAVADA Postgres" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, filename: $('Extract Summary').item.json.filename, summary: $('Extract Summary').item.json.summary_raw }) }}",
+        "options": { "responseHeaders": { "entries": [ { "name": "Access-Control-Allow-Origin", "value": "*" } ] } }
+      },
+      "id": "h1000000-0000-0000-0000-000000000005",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [640, 300]
+    }
+  ],
+  "connections": {
+    "POST /attach-analyze": { "main": [[{ "node": "OpenAI Vision", "type": "main", "index": 0 }]] },
+    "OpenAI Vision": { "main": [[{ "node": "Extract Summary", "type": "main", "index": 0 }]] },
+    "Extract Summary": { "main": [[{ "node": "Store Attachment", "type": "main", "index": 0 }]] },
+    "Store Attachment": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

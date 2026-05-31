@@ -21,6 +21,7 @@ export const TRIAGE_URL =
 export const PORTAL_URL = "https://n8n.navada-edge-server.uk/webhook/claims-portal";
 const N8N = "https://n8n.navada-edge-server.uk/webhook";
 export const CHAT_URL = `${N8N}/claims-chat`;
+export const ATTACH_URL = `${N8N}/attach-analyze`;
 export const ADMIN_LOGIN_URL = `${N8N}/admin-login`;
 export const CLAIMS_ADMIN_URL = `${N8N}/claims-admin`;
 export const DECISION_URL = `${N8N}/claims-decision`;
@@ -35,6 +36,12 @@ export const TEAM_ACTION_URL = `${N8N}/team-action`;
 
 // n8n base — used to deep-link a team member straight to a claim's execution.
 export const N8N_BASE = "https://n8n.navada-edge-server.uk";
+
+// Live database UI (CloudBeaver) exposed via the Cloudflare tunnel.
+export const DB_UI_URL = "https://db.navada-edge-server.uk";
+
+// Observability — Grafana dashboard fed by n8n /metrics via Prometheus.
+export const GRAFANA_URL = "https://grafana.navada-edge-server.uk/d/ava-n8n-obs";
 
 // The three real teams Ava hands work to, and the actions each can take.
 // Each team has a real mailbox; Ava emails them when a claim lands in their queue.
@@ -79,7 +86,7 @@ export const N8N_WORKFLOW_URL =
 export const LIFECYCLE_STAGES = [
   { key: "submitted", label: "Submitted", desc: "Claim received via Ava" },
   { key: "triaged", label: "AI triaged", desc: "Classified & risk-scored" },
-  { key: "review", label: "Decision", desc: "Auto-settled or human review" },
+  { key: "review", label: "Decision", desc: "Accept, refer or decline — routed to a team" },
   { key: "settled", label: "Resolved", desc: "Approved / settled / rejected" },
 ];
 
@@ -110,29 +117,29 @@ export const WORKFLOW_STEPS = [
     node: "PostgreSQL · INSERT jeen.claims",
     what: "Writes the claim and the full AI assessment to a Postgres table with a generated claim reference.",
     why: "Creates a defensible audit trail from the very first second — every decision, automated or human, is recorded." },
-  { n: "4", tag: "Routing rule", tagClass: "t-rule", title: "Needs human review?",
-    node: "n8n IF node",
-    what: "Evaluates a governance rule: value ≥ £10k, OR fraud risk ≥ 60, OR vulnerable customer, OR routing ≠ auto-settle.",
-    why: "Governance is explicit and inspectable — not buried inside the prompt. Anyone can read exactly when a human is required." },
-  { n: "5a", tag: "Human-in-the-loop", tagClass: "t-hil", title: "Adjuster approval (sensitive path)",
-    node: "n8n Wait → Form (Approve / Reject)",
-    what: "The flow pauses. An adjuster opens a review form showing the AI summary, fraud score and vulnerability flag, and approves or rejects with notes.",
-    why: "No high-value, high-risk or vulnerable-customer claim is ever actioned without a person. This is the core of 'governed' AI." },
-  { n: "5b", tag: "Auto path", tagClass: "t-auto", title: "Auto-settle (clean path)",
-    node: "n8n Set → Postgres UPDATE",
-    what: "Low-value, low-risk, non-vulnerable claims are fast-tracked and their status is updated automatically.",
-    why: "Straight-through processing where it is safe — freeing adjusters to focus on the claims that need judgement." },
-  { n: "6", tag: "Action", tagClass: "t-act", title: "Acknowledge the claimant",
-    node: "Email (Zoho SMTP) · or JSON response to the portal",
-    what: "Sends a branded acknowledgement with the claim reference and next steps; the API path returns the decision JSON to this UI.",
-    why: "Closes the loop with the customer immediately — faster first response, fewer SLA breaches." },
+  { n: "4", tag: "Decision", tagClass: "t-rule", title: "Decision engine — accept / refer / decline",
+    node: "n8n Code + IF",
+    what: "A deterministic rule turns the assessment into accept, refer or decline and picks the team: below the policy excess → decline (Legal); fraud ≥ 60 → Legal; ≥ £5,000, high severity or vulnerable → Claims Adjuster; otherwise accept → Finance.",
+    why: "Governance is explicit and inspectable — not buried in the prompt. The model never decides an outcome; the rule does, and anyone can read it." },
+  { n: "5a", tag: "Human-in-the-loop", tagClass: "t-hil", title: "Refer to a team (human decision)",
+    node: "Team Console + email handoff",
+    what: "Referred and declined claims land in the assigned team's queue (Claims Adjuster or Legal). Ava emails the team; they approve, decline, request info or escalate — and the claimant is updated automatically.",
+    why: "No high-value, high-risk or vulnerable-customer claim is ever actioned without a person. Teams collaborate through the same connected workflow." },
+  { n: "5b", tag: "Accept path", tagClass: "t-auto", title: "Accept → Finance (payment)",
+    node: "Team Console · Finance",
+    what: "Accepted claims route to Finance, who release the payment (simulated), generating a payment reference (PAY-YYYY-xxxxx).",
+    why: "Straight-through where it is safe — freeing handlers to focus on claims that need judgement, with payment kept under a human's control." },
+  { n: "6", tag: "Action", tagClass: "t-act", title: "Notify claimant + assigned team",
+    node: "Email (Zoho SMTP) · branded & mobile",
+    what: "Ava emails the claimant a branded acknowledgement (and an update at every later stage), and alerts the assigned team with links to the Team Console and the exact n8n execution.",
+    why: "Closes the loop with the customer immediately and connects the teams — faster first response, fewer SLA breaches, nothing lost between hand-offs." },
 ];
 
 export const STATS = [
-  { n: "~60%", l: "of triage effort is low-value, repetitive reading" },
-  { n: "143ms", l: "live execution time of the agent workflow" },
+  { n: "3", l: "outcomes on every claim — accept, refer or decline" },
+  { n: "3", l: "specialist teams connected in one workflow" },
   { n: "FCA", l: "Consumer-Duty vulnerability flag on every claim" },
-  { n: "100%", l: "of sensitive claims held for human approval" },
+  { n: "100%", l: "of claims & team actions written to an audit trail" },
 ];
 
 export const FORM_URL = "https://n8n.navada-edge-server.uk/form/albion-claim-fnol";
@@ -186,10 +193,10 @@ export const ASSIGNMENT = {
   ],
   wants: ["Hands-on comfort with AI agents and tools", "Good judgement", "A relevant, well-chosen use case", "Clear, structured communication"],
   coverage: [
-    { req: "Working agent flow in n8n", met: "Self-hosted n8n, executed live in 143ms" },
-    { req: "LLM-powered decision step", met: "OpenAI structured triage: type, severity, fraud score, vulnerability, routing" },
-    { req: "Action / integration", met: "PostgreSQL insert + acknowledgement email" },
-    { req: "Human-in-the-loop", met: "Adjuster approval on every sensitive claim" },
+    { req: "Working agent flow in n8n", met: "Self-hosted n8n — Ava: AI Agent with memory + 3 tools, live" },
+    { req: "LLM-powered decision step", met: "OpenAI structured triage: type, severity, fraud score, vulnerability" },
+    { req: "Action / integration", met: "PostgreSQL, RAG (pgvector), branded email, payment simulation" },
+    { req: "Human-in-the-loop", met: "Per-team console + admin approval on every sensitive claim" },
     { req: "Fully working / live", met: "Reviewer-testable hosted URL + this app" },
     { req: "Exported workflow + screenshots + dataset", met: "All provided in the submission pack" },
     { req: "Presentation", met: "Interactive deck — built into this app" },
@@ -198,9 +205,20 @@ export const ASSIGNMENT = {
 
 export const SECURITY = [
   { icon: "lock", t: "Secrets never touch the client", d: "API keys and database credentials live only inside n8n's encrypted credential store on the server. The browser only ever sees the claim form and the triage result — never a key." },
-  { icon: "cube", t: "The LLM is sandboxed to a decision", d: "The model receives only the claim text and returns schema-constrained JSON. It has no tools, no database access and no ability to settle, pay or reject — it cannot take an action on its own." },
-  { icon: "userCheck", t: "Human-in-the-loop on anything sensitive", d: "Complex, high-value (≥ £5,000), high-fraud-risk (≥60) or vulnerable-customer claims are always paused for a named adjuster to approve or reject. Automation is bounded by an explicit, inspectable rule." },
+  { icon: "cube", t: "The model assists — it never acts", d: "Ava reads the claim and returns schema-constrained JSON. Her tools are assistive and read-only (calculate, look up policy facts via RAG, search) — she has no ability to settle, pay or reject. A separate deterministic rule, and a human, decide every outcome." },
+  { icon: "userCheck", t: "Human-in-the-loop on anything sensitive", d: "High-value (≥ £5,000), high-fraud-risk (≥ 60) or vulnerable-customer claims are always referred to a named team (Claims Adjuster or Legal) to decide, and Finance releases every payment. Automation is bounded by an explicit, inspectable rule — the LLM never decides an outcome." },
   { icon: "database", t: "Auditable system of record", d: "Every claim and every decision — automated or human — is written to PostgreSQL with a claim reference and timestamp, giving a defensible, replayable audit trail." },
   { icon: "globe", t: "Governed network access", d: "Hosting is via a Cloudflare tunnel over an encrypted Tailscale mesh; no inbound ports are exposed on the host. Origins are controlled and traffic is TLS-terminated at the edge." },
   { icon: "document", t: "Regulatory alignment (FCA)", d: "Vulnerable-customer detection is a first-class output, supporting FCA Consumer Duty obligations. PII is minimised, and the design supports retention limits and right-to-erasure on the record store." },
+];
+
+// Responsible / ethical AI principles — shown on the Data & Security page.
+// Insurance is sensitive, so the AI stays assistive and every outcome is governed.
+export const ETHICS = [
+  { icon: "userCheck", c: "lilac", t: "Human accountability", d: "Every sensitive outcome — ≥ £5,000, high fraud risk, vulnerable customers, declines and payments — is owned and actioned by a named person. The AI surfaces signals; people decide and stay accountable." },
+  { icon: "scale", c: "amber", t: "Deterministic & explainable", d: "Outcomes come from an explicit rule, not a black box. We can tell a customer or regulator exactly why a claim was accepted, referred or declined — and reproduce that decision precisely." },
+  { icon: "shield", c: "red", t: "Fairness & vulnerability", d: "An FCA Consumer-Duty vulnerability check runs on every claim and routes those customers to a person with extra care. The same rule is applied to everyone — consistent, not discretionary." },
+  { icon: "lock", c: "lilac", t: "Privacy & honesty", d: "Data is minimised and secrets stay server-side. Ava never invents facts, gives legal/medical/financial advice or promises a payout, is clearly identified as an AI, and always has a human to escalate to." },
+  { icon: "document", c: "amber", t: "Auditable & contestable", d: "Every claim and every action is timestamped in PostgreSQL, so decisions can be reviewed, appealed and corrected — declines carry explicit 14-day appeal rights to the Legal team." },
+  { icon: "cube", c: "red", t: "Bounded automation", d: "The model has only assistive, read-only tools and cannot settle, pay or reject. The boundary between what the AI may do and what a human must do is explicit and enforced in the workflow." },
 ];

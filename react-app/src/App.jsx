@@ -21,7 +21,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { PRODUCT, PROFILE, NAVADA, N8N_WORKFLOW_URL } from "./data.js";
 import { Icon } from "./icons.jsx";
 import { useClerk, useUser, SignedIn, SignedOut } from "@clerk/clerk-react";
-import { Overview, Demo, HowItWorks, DataSecurity, Assignment, Admin, Account, Presentation, TeamConsole } from "./pages.jsx";
+import { Overview, Demo, HowItWorks, DataSecurity, Assignment, Admin, Account, Presentation, TeamConsole, DatabasePage, ObservabilityPage } from "./pages.jsx";
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -72,16 +72,25 @@ export function Mesh() {
   return <div className="mesh" aria-hidden><span className="blob b1" /><span className="blob b2" /><span className="blob b3" /></div>;
 }
 
-const NAV = [
-  ["overview", "Overview", "Product overview"],
-  ["demo", "Ava", "Talk to the agent"],
-  ["how", "How It Works", "The workflow, explained"],
-  ["security", "Data & Security", "Governance, GDPR, DPA"],
-  ["account", "My Claims", "Customer portal"],
-  ["admin", "Admin", "Operations console"],
-  ["team", "Team Console", "Adjuster · Legal · Finance"],
-  ["assignment", "Assignment", "The Jeen brief"],
-  ["present", "Present", "Interactive deck"],
+// Menu grouped into sections; the "Admin" group holds the operational sub-pages.
+const MENU = [
+  { items: [
+    ["overview", "Overview", "Product overview"],
+    ["demo", "Ava", "Talk to the agent"],
+    ["how", "How It Works", "The workflow, explained"],
+    ["security", "Data & Security", "Governance, GDPR, DPA"],
+    ["account", "My Claims", "Customer portal"],
+  ] },
+  { group: "Admin", items: [
+    ["admin", "Dashboard", "Claims MI & approvals"],
+    ["team", "Team Console", "Adjuster · Legal · Finance"],
+    ["db", "Database", "Live PostgreSQL · CloudBeaver"],
+    ["obs", "Observability", "n8n metrics · Grafana"],
+  ], ext: { label: "Live n8n workflow", desc: "Open the agent in n8n ↗" } },
+  { group: "About", items: [
+    ["assignment", "Assignment", "The Jeen brief"],
+    ["present", "Present", "Interactive deck"],
+  ] },
 ];
 
 function PanelUser({ onClose }) {
@@ -118,17 +127,20 @@ function SidePanel({ open, route, onClose }) {
           <button className="drawer-x" onClick={onClose} aria-label="Close menu">✕</button>
         </div>
         <nav className="sp-nav">
-          {NAV.map(([k, l, d], i) => (
-            <React.Fragment key={k}>
-              <a href={`#/${k}`} className={`sp-link ${route === k ? "active" : ""}`} onClick={onClose}>
-                <span className="sp-l">{l}</span><span className="sp-d">{d}</span>
-              </a>
-              {i === 0 && (
+          {MENU.map((sec, si) => (
+            <div className="sp-sec" key={si}>
+              {sec.group && <div className="sp-group">{sec.group}</div>}
+              {sec.items.map(([k, l, d]) => (
+                <a key={k} href={`#/${k}`} className={`sp-link ${route === k ? "active" : ""}`} onClick={onClose}>
+                  <span className="sp-l">{l}</span><span className="sp-d">{d}</span>
+                </a>
+              ))}
+              {sec.ext && (
                 <a href={N8N_WORKFLOW_URL} target="_blank" rel="noreferrer" className="sp-link sp-ext" onClick={() => { onClose(); window.dispatchEvent(new Event("ava-launch")); }}>
-                  <span className="sp-l"><Icon name="gear" size={15} /> Live n8n workflow</span><span className="sp-d">Open the agent in n8n ↗</span>
+                  <span className="sp-l"><Icon name="gear" size={15} /> {sec.ext.label}</span><span className="sp-d">{sec.ext.desc}</span>
                 </a>
               )}
-            </React.Fragment>
+            </div>
           ))}
         </nav>
         {CLERK_KEY && <PanelUser onClose={onClose} />}
@@ -175,7 +187,6 @@ function Footer() {
           <div>
             <h5>NAVADA Edge</h5>
             <p>{NAVADA.tagline}</p>
-            <a href={`https://${NAVADA.site}`} target="_blank" rel="noreferrer">{NAVADA.site}</a>
             <a href="https://navada-lab.space" target="_blank" rel="noreferrer">navada-lab.space</a>
           </div>
           <div>
@@ -183,7 +194,6 @@ function Footer() {
             <p>{PROFILE.name}</p>
             <p style={{ color: "#9a90b3", fontSize: 12.5 }}>{PROFILE.role}</p>
             <a href={`mailto:${PROFILE.email}`}>{PROFILE.email}</a>
-            <a href={`https://${PROFILE.github}`} target="_blank" rel="noreferrer">{PROFILE.github}</a>
           </div>
         </div>
         <div className="footbottom">
@@ -217,7 +227,7 @@ export default function App() {
   const [boot, setBoot] = useState(true);        // initial-load splash
   const [launching, setLaunching] = useState(false); // route / external launch splash
 
-  useEffect(() => { const t = setTimeout(() => setBoot(false), 1050); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(() => setBoot(false), 3000); return () => clearTimeout(t); }, []);
   // External launch (e.g. opening the live n8n workflow) fires this event.
   useEffect(() => {
     const on = () => setLaunching(true);
@@ -230,7 +240,7 @@ export default function App() {
   useEffect(() => { if (launching) { const t = setTimeout(() => setLaunching(false), 820); return () => clearTimeout(t); } }, [launching]);
 
   if (route === "present") return <Presentation />;
-  const Page = { overview: Overview, demo: Demo, how: HowItWorks, security: DataSecurity, admin: Admin, account: Account, assignment: Assignment, team: TeamConsole }[route] || Overview;
+  const Page = { overview: Overview, demo: Demo, how: HowItWorks, security: DataSecurity, admin: Admin, account: Account, assignment: Assignment, team: TeamConsole, db: DatabasePage, obs: ObservabilityPage }[route] || Overview;
   return (
     <>
       <Splash show={boot || launching} />
