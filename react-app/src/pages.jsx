@@ -723,6 +723,18 @@ export function Assignment() {
           </Reveal>
         </div>
 
+        {/* The actual Jeen assignment brief (the real PDF Jeen sent). */}
+        <Reveal className="dbframe-bar" style={{ marginTop: 8 }}>
+          <span className="dim2 small">Official brief · Jeen UK — AI Solution Engineer — Home Assignment (PDF)</span>
+          <span style={{ display: "flex", gap: 8 }}>
+            <a href="/docs/jeen-assignment-brief.pdf" target="_blank" rel="noreferrer" className="btn ghost sm">Open ↗</a>
+            <a href="/docs/jeen-assignment-brief.pdf" download className="btn grad sm">Download ↓</a>
+          </span>
+        </Reveal>
+        <Reveal className="dbframe" style={{ marginBottom: 24 }}>
+          <iframe src="/docs/jeen-assignment-brief.pdf#view=FitH" title="Jeen UK — AI Solution Engineer — Home Assignment (official brief)" loading="lazy" />
+        </Reveal>
+
         <Reveal className="subhead"><h3 className="ah3">Deliverables</h3><span className="dim2">What the assignment asked for — all provided.</span></Reveal>
         <div className="fgrid">
           {ASSIGNMENT.deliverables.map((d, i) => (
