@@ -79,6 +79,52 @@ function HeroBanner() {
   );
 }
 
+/* ---- Animated count-up used by the home stat strip ---- */
+function Counter({ to, prefix = "", suffix = "", run, delay = 0 }) {
+  const [v, setV] = useState(0);
+  useEffect(() => {
+    if (!run) return;
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) { setV(to); return; }
+    let raf; const dur = 1400, start = performance.now() + delay;
+    const tick = (now) => {
+      if (now < start) { raf = requestAnimationFrame(tick); return; }
+      const p = Math.min(1, (now - start) / dur);
+      setV(Math.round(to * (1 - Math.pow(1 - p, 3)))); // easeOutCubic
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [run, to, delay]);
+  return <span>{prefix}{v}{suffix}</span>;
+}
+
+/* Home stat strip — numbers count up the first time it scrolls into view, and
+   each cell lifts on hover. A "live" pulse marks it as a real, running system. */
+function StatStrip() {
+  const ref = useRef(null);
+  const [run, setRun] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setRun(true); io.unobserve(el); } }, { threshold: 0.3 });
+    if (el) io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <div ref={ref} className="strip statstrip reveal in">
+      {STATS.map((s, i) => (
+        <div className="cell statcell" key={s.l}>
+          <div className="n gradtext">
+            {s.text ? s.text : <Counter to={s.to} prefix={s.prefix} suffix={s.suffix} run={run} delay={i * 130} />}
+          </div>
+          <div className="l">{s.l}</div>
+        </div>
+      ))}
+      <span className="strip-live"><i /> live</span>
+    </div>
+  );
+}
+
 /* ============================ OVERVIEW ============================ */
 export function Overview() {
   return (
@@ -87,9 +133,7 @@ export function Overview() {
 
       <section className="section stripsection">
         <div className="wrap">
-          <Reveal className="strip">
-            {STATS.map((s) => <div className="cell" key={s.l}><div className="n gradtext">{s.n}</div><div className="l">{s.l}</div></div>)}
-          </Reveal>
+          <StatStrip />
         </div>
       </section>
 
@@ -499,9 +543,11 @@ export function HowItWorks() {
         <Reveal className="shead">
           <div className="eyebrow">Start a claim</div>
           <h2>Talk to Ava, or fill the form.</h2>
-          <p className="sublead">Report a claim in seconds — then scroll to see exactly how it's handled, end to end.</p>
+          <p className="sublead">Report a claim in seconds — then scroll to see exactly how it's handled, end to end. Ava is a secure, per-customer agent: sign in and she remembers your previous conversations and claim history.</p>
         </Reveal>
-        <ClaimIntake />
+        <Reveal style={{ textAlign: "center", margin: "8px 0 4px" }}>
+          <a href="#/demo" className="btn grad" style={{ display: "inline-flex" }}>Sign in &amp; talk to Ava →</a>
+        </Reveal>
 
         <Reveal className="shead" delay={1} style={{ marginTop: 64 }}>
           <div className="eyebrow">How it works</div>
