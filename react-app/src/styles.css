@@ -97,6 +97,13 @@ h1 .serif{font-weight:400;font-style:italic;letter-spacing:-.01em}
 .strip .cell:last-child{border-right:0}
 .strip .n{font-size:30px;font-weight:800;letter-spacing:-.02em}
 .strip .l{font-size:12.5px;color:var(--ink2);margin-top:6px;line-height:1.35}
+/* dynamic stat strip — count-up numbers, hover lift, live pulse */
+.statstrip{position:relative}
+.statstrip .n{font-variant-numeric:tabular-nums}
+.statcell{transition:background .2s,transform .2s}
+.statcell:hover{background:var(--soft);transform:translateY(-2px)}
+.strip-live{position:absolute;top:11px;right:14px;display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.strip-live i{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(28,157,131,.5);animation:pulse 2s infinite}
 @media(max-width:760px){.strip{grid-template-columns:1fr 1fr}.strip .cell:nth-child(2){border-right:0}}
 
 /* ---------- sections ---------- */

@@ -1561,34 +1561,26 @@ const SLIDES = [
   },
 ];
 
+// The presentation is the official, hand-authored deck served as a PDF
+// (public/docs/ava-presentation.pdf), shown full-screen in an embedded viewer.
+const PRESENTATION_PDF = "/docs/ava-presentation.pdf";
 export function Presentation() {
-  const [i, setI] = useState(0);
-  const next = () => setI((x) => Math.min(x + 1, SLIDES.length - 1));
-  const prev = () => setI((x) => Math.max(x - 1, 0));
   useEffect(() => {
-    const on = (e) => {
-      if (["ArrowRight", " "].includes(e.key)) next();
-      if (e.key === "ArrowLeft") prev();
-      if (e.key === "Escape") window.location.hash = "#/overview";
-    };
+    const on = (e) => { if (e.key === "Escape") window.location.hash = "#/overview"; };
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
   }, []);
   return (
     <div className="present">
-      <button className="present-exit" onClick={() => (window.location.hash = "#/overview")}>✕</button>
-      <div className="present-stage">
-        <Mesh />
-        <div className="slide-c" key={i}>{SLIDES[i].render()}</div>
-      </div>
-      <div className="present-bar">
-        <div className="brand" style={{ color: "#fff" }}><JeenLogo size={26} /> {PRODUCT.name}</div>
-        <div className="dots">{SLIDES.map((_, x) => <b key={x} className={x === i ? "on" : ""} onClick={() => setI(x)} />)}</div>
+      <div className="present-pdf-bar">
+        <div className="brand" style={{ color: "#fff" }}><JeenLogo size={24} /> {PRODUCT.name} — Presentation</div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="pbtn" onClick={prev} disabled={i === 0}>← Prev</button>
-          <button className="pbtn" onClick={next} disabled={i === SLIDES.length - 1}>Next →</button>
+          <a className="pbtn" href={PRESENTATION_PDF} target="_blank" rel="noreferrer">Open in new tab ↗</a>
+          <a className="pbtn" href={PRESENTATION_PDF} download>Download PDF ↓</a>
+          <button className="pbtn" onClick={() => (window.location.hash = "#/overview")}>✕ Close</button>
         </div>
       </div>
+      <iframe className="present-pdf-frame" src={`${PRESENTATION_PDF}#view=FitH`} title="Ava — Governed Insurance AI presentation" />
     </div>
   );
 }
