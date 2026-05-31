@@ -960,6 +960,131 @@ function AdminCharts({ claims }) {
   );
 }
 
+/* ---- Admin Ava: an analytics assistant for operators ----
+ * WHAT: an admin asks plain-English questions about the whole book of claims
+ *       ("how many claims this week?", "what's our fraud rate?") and Ava answers.
+ * HOW:  we compute a compact, SAFE set of metrics IN-APP from the claims the
+ *       dashboard already loaded from PostgreSQL — no raw SQL, the model never
+ *       touches the database — then send the question + those metrics to the
+ *       existing Ava chat endpoint for the LLM to narrate. If the agent's
+ *       claims-only guardrail declines, we fall back to a local summary so the
+ *       demo never stalls.
+ * WHY:  shows the second half of the Jeen story — AI for the operator, not just
+ *       AI for triage — while keeping the same governance (tools compute, the
+ *       model explains, it cannot query or act on customer data itself). */
+function adminMetrics(claims) {
+  const all = claims || [];
+  const num = (x) => Number(x || 0);
+  const parse = (c) => { const d = new Date(String(c.received || "").replace(" ", "T")); return isNaN(d) ? null : d; };
+  const now = new Date();
+  const since = (days) => { const t = now.getTime() - days * 864e5; return all.filter((c) => { const d = parse(c); return d && d.getTime() >= t; }); };
+  const decisionOf = (c) => c.decision || (["paid", "approved"].includes(c.status) ? "accept" : c.status === "declined" ? "decline" : c.status === "referred" ? "refer" : "other");
+  const n = all.length;
+  const week = since(7), month = since(30);
+  const by = (arr, f) => arr.filter(f).length;
+  const sumVal = (arr) => arr.reduce((a, c) => a + num(c.estimated_value), 0);
+  const types = ["Motor", "Home", "Travel", "Liability"];
+  return {
+    generated_at: now.toISOString().slice(0, 10),
+    total_claims: n,
+    claims_last_7_days: week.length,
+    claims_last_30_days: month.length,
+    decisions: {
+      accepted: by(all, (c) => decisionOf(c) === "accept"),
+      referred: by(all, (c) => decisionOf(c) === "refer"),
+      declined: by(all, (c) => decisionOf(c) === "decline"),
+    },
+    in_review: by(all, (c) => c.status === "referred"),
+    paid: by(all, (c) => c.status === "paid"),
+    vulnerable_customers: by(all, (c) => c.vulnerable_flag),
+    fraud: {
+      high_risk_ge_60: by(all, (c) => num(c.fraud_risk) >= 60),
+      medium_30_59: by(all, (c) => num(c.fraud_risk) >= 30 && num(c.fraud_risk) < 60),
+      low_lt_30: by(all, (c) => num(c.fraud_risk) < 30),
+      average_score: n ? Math.round(all.reduce((a, c) => a + num(c.fraud_risk), 0) / n) : 0,
+    },
+    by_type: types.reduce((o, t) => { o[t] = by(all, (c) => (c.claim_type || c.incident_type || "").toLowerCase().includes(t.toLowerCase())); return o; }, {}),
+    value: {
+      total_claimed_gbp: Math.round(sumVal(all)),
+      paid_out_gbp: Math.round(sumVal(all.filter((c) => c.status === "paid"))),
+      average_claim_gbp: n ? Math.round(sumVal(all) / n) : 0,
+    },
+  };
+}
+
+// Plain-text fallback if the live agent declines (keeps the demo moving).
+function localAnswer(m) {
+  return `Here's the current picture across Albion Mutual (as of ${m.generated_at}):
+• ${m.total_claims} claims in total — ${m.claims_last_7_days} in the last 7 days, ${m.claims_last_30_days} in the last 30.
+• Decisions: ${m.decisions.accepted} accepted, ${m.decisions.referred} referred, ${m.decisions.declined} declined (${m.in_review} currently in review).
+• Fraud: ${m.fraud.high_risk_ge_60} high-risk (≥60), average score ${m.fraud.average_score}/100.
+• ${m.vulnerable_customers} vulnerable customers flagged for extra care.
+• Value: £${m.value.total_claimed_gbp.toLocaleString()} claimed, £${m.value.paid_out_gbp.toLocaleString()} paid out.`;
+}
+
+const ADMIN_AVA_GREETING = { role: "assistant", content: "I'm Ava — your operations assistant. Ask me anything about Albion Mutual's claims: volumes, fraud, vulnerable customers, payouts, trends. For example: \"How many claims did we have this week?\"" };
+const ADMIN_AVA_CHIPS = ["How many claims this week?", "What's our fraud rate?", "How many vulnerable customers?", "How much have we paid out?", "Which claim type is most common?"];
+
+function AdminAva({ claims }) {
+  const [messages, setMessages] = useState([ADMIN_AVA_GREETING]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const scroller = useRef(null);
+  const sid = useRef("admin-analytics-" + Math.random().toString(36).slice(2, 9));
+  useEffect(() => { scroller.current?.scrollTo({ top: 9e9, behavior: "smooth" }); }, [messages, busy]);
+
+  async function ask(text) {
+    const q = (text ?? input).trim();
+    if (!q || busy) return;
+    setInput("");
+    setMessages((m) => [...m, { role: "user", content: q }]);
+    setBusy(true);
+    const m = adminMetrics(claims);
+    // Hand the model the safe, pre-computed metrics and ask it to answer from them only.
+    const prompt = `You are Ava, an analytics assistant for Albion Mutual's claims operations team. Answer the operator's question using ONLY the JSON metrics below — do not invent numbers. Be concise, use plain English, and quote the relevant figures. If the metrics don't cover the question, say what you can answer instead.\n\nMETRICS:\n${JSON.stringify(m)}\n\nQUESTION: ${q}`;
+    try {
+      const r = await fetch(CHAT_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sid.current, messages: [{ role: "user", content: prompt }] }) });
+      const d = await r.json();
+      const reply = (d && d.reply) ? d.reply : localAnswer(m);
+      setMessages((mm) => [...mm, { role: "assistant", content: reply }]);
+    } catch (e) {
+      setMessages((mm) => [...mm, { role: "assistant", content: localAnswer(m) }]);
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="console" style={{ marginBottom: 28 }}>
+      <div className="console-bar">
+        <span className="dots"><i /><i /><i /></span>
+        <span className="url">Ava · operations analytics agent</span>
+        <span className="live"><i /> querying live MI</span>
+      </div>
+      <div className="console-body">
+        <div className="ava-header">
+          <AvaAvatar size={40} online />
+          <div className="ava-meta"><b>Ava — Admin</b><span className="dim small">Ask about everything happening at Albion Mutual</span></div>
+        </div>
+        <div className="chatlog" ref={scroller} style={{ minHeight: 200 }}>
+          {messages.map((mm, i) => (
+            <div key={i} className={`msg ${mm.role}`}>
+              {mm.role === "assistant" && <AvaAvatar size={30} />}
+              <div className="bubble" style={{ whiteSpace: "pre-wrap" }}>{mm.content}</div>
+            </div>
+          ))}
+          {busy && <div className="msg assistant"><AvaAvatar size={30} /><div className="bubble typing"><span /><span /><span /></div></div>}
+        </div>
+        <div className="ava-chips">
+          {ADMIN_AVA_CHIPS.map((c) => <button key={c} className="ava-chip" disabled={busy} onClick={() => ask(c)}>{c}</button>)}
+        </div>
+        <form className="chatinput" onSubmit={(e) => { e.preventDefault(); ask(); }}>
+          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask Ava about Albion Mutual's claims…" />
+          <button className="runbtn" style={{ width: "auto", padding: "12px 20px", marginTop: 0 }} disabled={busy} type="submit">Ask</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export function Admin() {
   const [token, setToken] = useState(() => sessionStorage.getItem("jeen_admin_token") || "");
   const [user, setUser] = useState(() => sessionStorage.getItem("jeen_admin_user") || "");
@@ -971,6 +1096,7 @@ export function Admin() {
   const [sel, setSel] = useState(null);
   const [busy, setBusy] = useState(false);
   const [acting, setActing] = useState("");
+  const [tab, setTab] = useState("mi");
 
   async function login(e) {
     e.preventDefault(); setLoginErr(""); setBusy(true);
@@ -1032,6 +1158,19 @@ export function Admin() {
           <div className="adminuser">Signed in as <b>{user}</b><button className="btn ghost sm" onClick={load} disabled={busy} style={{ marginLeft: 12 }}>↻ Refresh</button><button className="btn ghost sm" onClick={logout} style={{ marginLeft: 8 }}>Sign out</button></div>
         </div>
 
+        <div className="tabs" style={{ marginBottom: 18 }}>
+          <button className={`tab ${tab === "mi" ? "on" : ""}`} onClick={() => setTab("mi")}>MI dashboard</button>
+          <button className={`tab ${tab === "ava" ? "on" : ""}`} onClick={() => setTab("ava")}>Ask Ava</button>
+        </div>
+
+        {tab === "ava" && (
+          <>
+            <p className="sublead" style={{ marginTop: -4, marginBottom: 16 }}>Ava reads the live claims metrics and answers your questions in plain English — the same AI that triages claims, now helping you run the operation. She narrates from pre-computed figures and never queries the database directly.</p>
+            {claims === null ? <p className="dim2">Loading live claims…</p> : <AdminAva claims={claims} />}
+          </>
+        )}
+
+        <div style={{ display: tab === "mi" ? "block" : "none" }}>
         {claims && <AdminCharts claims={claims} />}
 
         <div className="tablewrap">
@@ -1091,6 +1230,7 @@ export function Admin() {
             );
           })}
         </div>
+        </div>{/* end MI tab */}
       </div>
       {sel && <ClaimDrawer claim={sel} convo={convos.find((cv) => cv.claim_ref === sel.claim_ref)} onClose={() => setSel(null)} onDecide={decide} acting={acting} />}
     </section>
