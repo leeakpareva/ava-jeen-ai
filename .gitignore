@@ -22,3 +22,5 @@ react-app/playwright-report/
 Thumbs.db
 *.log
 npm-debug.log*
+react-app/pw.txt
+react-app/e2e-final.txt
