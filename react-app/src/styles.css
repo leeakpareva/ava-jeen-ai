@@ -422,6 +422,22 @@ footer{background:#15101e;color:#b8aecb;padding:60px 0 30px;margin-top:30px}
 .attachbtn:hover{border-color:var(--lilac);background:var(--lilac-soft)}
 .attach-chip{display:inline-flex;align-items:center;font-weight:700;font-size:13px;color:var(--lilac-deep);background:var(--lilac-soft);padding:4px 10px;border-radius:999px}
 .attach-read{margin-top:7px;font-size:13.5px;line-height:1.5;color:var(--ink2)}
+
+/* ---- Structured form: light-theme overrides (the console is white now) ---- */
+.console-body{padding:24px}
+.console .scenarios{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:20px}
+.console .chip{font-size:12.5px;font-weight:600;color:var(--ink);background:#fff;border:1px solid var(--line);padding:8px 14px;border-radius:22px;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:8px}
+.console .chip:hover{border-color:var(--lilac);background:var(--lilac-soft)}
+.console .field label{color:var(--ink2)}
+.console .field input,.console .field select,.console .field textarea{background:#fff;border:1.5px solid var(--line);color:var(--ink)}
+.console .field input:focus,.console .field select:focus,.console .field textarea:focus{border-color:var(--lilac);background:#fff;box-shadow:0 0 0 3px var(--lilac-soft)}
+.console .field select option{color:var(--ink)}
+.console .result{background:#fcfbfe;border:1px solid var(--line);color:var(--ink)}
+.console .res-empty{color:var(--muted)}
+.console .scanlines div{color:var(--ink)}
+.console .scanlines .dim{color:var(--ink2)}
+.console .demo-note{color:var(--ink2)}
+.console .demo-note code,.console .demo-note a{color:var(--lilac-deep)}
 /* Live database (CloudBeaver) embed page */
 .dbframe-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:18px 0 10px}
 .dbframe{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 18px 50px rgba(80,40,120,.10)}
