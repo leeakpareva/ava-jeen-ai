@@ -1609,9 +1609,7 @@ export function ObservabilityPage() {
         {/* Grafana requires auth, so an embedded iframe renders blank. Show a real
             dashboard screenshot instead, with the live link above for the real thing. */}
         <Reveal className="dbframe">
-          <a href={GRAFANA_URL} target="_blank" rel="noreferrer" onClick={() => window.dispatchEvent(new Event("ava-launch"))}>
-            <img src="/shots/grafana-hero.png" alt="Ava / n8n observability dashboard in Grafana — workflow execution duration, CPU & memory, event-loop lag, HTTP throughput and cache hit rate." style={{ width: "100%", display: "block" }} />
-          </a>
+          <iframe src={`${GRAFANA_URL}?kiosk&theme=light&refresh=30s`} title="Ava / n8n observability (Grafana)" loading="lazy" />
         </Reveal>
         <p className="dim2 small" style={{ marginTop: 10 }}>Live Grafana dashboard (snapshot shown; click <b>Open the live dashboard</b> for the real-time view, which requires sign-in). Metrics: <code>n8n_workflow_execution_duration_seconds</code>, <code>n8n_process_*</code>, <code>n8n_nodejs_eventloop_lag_*</code>, <code>n8n_http_request_duration_seconds</code>, <code>n8n_cache_*</code>.</p>
       </div>
